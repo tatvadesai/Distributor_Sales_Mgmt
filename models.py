@@ -43,13 +43,14 @@ class Actual(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     distributor_id = db.Column(db.Integer, db.ForeignKey('distributor.id'), nullable=False)
     week_start_date = db.Column(db.String(10), nullable=False)  # Store as 'YYYY-MM-DD'
+    week_end_date = db.Column(db.String(10), nullable=False)  # Store as 'YYYY-MM-DD'
     actual_sales = db.Column(db.Float, nullable=False)
     month = db.Column(db.String(10), nullable=False)  # Auto-calculated: e.g., "Apr-2025"
     quarter = db.Column(db.String(10), nullable=False)  # Auto-calculated: e.g., "Q2-2025"
     year = db.Column(db.String(4), nullable=False)  # Auto-calculated: e.g., "2025"
     
     __table_args__ = (
-        UniqueConstraint('distributor_id', 'week_start_date', name='uix_actual_distributor_week'),
+        UniqueConstraint('distributor_id', 'week_start_date', 'week_end_date', name='uix_actual_distributor_week'),
     )
     
     def __repr__(self):

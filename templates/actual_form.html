@@ -24,11 +24,19 @@
                         </select>
                     </div>
                     
-                    <div class="mb-3">
-                        <label for="week_start_date" class="form-label">Week Start Date (Monday) <span class="text-danger">*</span></label>
-                        <input type="date" class="form-control" id="week_start_date" name="week_start_date" 
-                               value="{{ actual.week_start_date if actual else current_week_start }}" required>
-                        <div class="form-text">Select Monday of the week for which sales are being logged.</div>
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="week_start_date" class="form-label">Period Start Date <span class="text-danger">*</span></label>
+                            <input type="date" class="form-control" id="week_start_date" name="week_start_date" 
+                                   value="{{ actual.week_start_date if actual else current_week_start }}" required>
+                            <div class="form-text">Select the first day of the reporting period.</div>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="week_end_date" class="form-label">Period End Date <span class="text-danger">*</span></label>
+                            <input type="date" class="form-control" id="week_end_date" name="week_end_date" 
+                                   value="{{ actual.week_end_date if actual else current_week_end }}" required>
+                            <div class="form-text">Select the last day of the reporting period.</div>
+                        </div>
                     </div>
                     
                     <div class="mb-3">
@@ -57,26 +65,40 @@
 {% block scripts %}
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-    // Ensure the week_start_date is a Monday
-    const dateInput = document.getElementById('week_start_date');
+    const startDateInput = document.getElementById('week_start_date');
+    const endDateInput = document.getElementById('week_end_date');
     
-    dateInput.addEventListener('change', function() {
-        const selectedDate = new Date(this.value);
-        const dayOfWeek = selectedDate.getDay(); // 0 = Sunday, 1 = Monday, ...
-        
-        // If not Monday (1)
-        if (dayOfWeek !== 1) {
-            // Calculate the previous Monday
-            const prevMonday = new Date(selectedDate);
-            prevMonday.setDate(selectedDate.getDate() - (dayOfWeek === 0 ? 6 : dayOfWeek - 1));
+    // Calculate and set the end date when start date changes
+    startDateInput.addEventListener('change', function() {
+        if (startDateInput.value) {
+            const startDate = new Date(startDateInput.value);
+            
+            // Default end date is start date + 6 days (making it a week)
+            const endDate = new Date(startDate);
+            endDate.setDate(startDate.getDate() + 6);
             
             // Format as YYYY-MM-DD
-            const month = String(prevMonday.getMonth() + 1).padStart(2, '0');
-            const day = String(prevMonday.getDate()).padStart(2, '0');
-            const formattedDate = `${prevMonday.getFullYear()}-${month}-${day}`;
+            const month = String(endDate.getMonth() + 1).padStart(2, '0');
+            const day = String(endDate.getDate()).padStart(2, '0');
+            const formattedDate = `${endDate.getFullYear()}-${month}-${day}`;
             
-            this.value = formattedDate;
-            alert("Date automatically adjusted to the Monday of the selected week.");
+            // Only update end date automatically if it's not already set
+            if (!endDateInput.value) {
+                endDateInput.value = formattedDate;
+            }
+        }
+    });
+    
+    // Validate that end date is not before start date
+    endDateInput.addEventListener('change', function() {
+        if (startDateInput.value && endDateInput.value) {
+            const startDate = new Date(startDateInput.value);
+            const endDate = new Date(endDateInput.value);
+            
+            if (endDate < startDate) {
+                alert("End date cannot be before the start date.");
+                endDateInput.value = startDateInput.value;
+            }
         }
     });
 });
