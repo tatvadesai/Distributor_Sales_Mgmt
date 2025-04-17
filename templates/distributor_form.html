@@ -30,6 +30,12 @@
                         <div class="form-text">Include country code (e.g., +91XXXXXXXXXX).</div>
                     </div>
                     
+                    <div class="mb-3">
+                        <label for="area" class="form-label">Area/Territory</label>
+                        <input type="text" class="form-control" id="area" name="area" value="{{ distributor.area if distributor else '' }}">
+                        <div class="form-text">Geographic territory or region covered by the distributor.</div>
+                    </div>
+                    
                     <div class="d-flex justify-content-between">
                         <a href="{{ url_for('distributors') }}" class="btn btn-secondary">
                             <i class="fas fa-arrow-left me-1"></i>Back

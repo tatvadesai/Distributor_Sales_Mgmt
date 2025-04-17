@@ -16,6 +16,7 @@
                         <thead class="table-dark">
                             <tr>
                                 <th>Name</th>
+                                <th>Area/Territory</th>
                                 <th>Email</th>
                                 <th>WhatsApp</th>
                                 <th class="text-end">Actions</th>
@@ -26,6 +27,7 @@
                                 {% for distributor in distributors %}
                                     <tr>
                                         <td>{{ distributor.name }}</td>
+                                        <td>{{ distributor.area or 'Not specified' }}</td>
                                         <td>{{ distributor.email or 'Not specified' }}</td>
                                         <td>{{ distributor.whatsapp or 'Not specified' }}</td>
                                         <td class="text-end">
@@ -65,7 +67,7 @@
                                 {% endfor %}
                             {% else %}
                                 <tr>
-                                    <td colspan="4" class="text-center">No distributors found. Add your first distributor!</td>
+                                    <td colspan="5" class="text-center">No distributors found. Add your first distributor!</td>
                                 </tr>
                             {% endif %}
                         </tbody>

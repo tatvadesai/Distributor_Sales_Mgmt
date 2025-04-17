@@ -17,6 +17,7 @@ class Distributor(db.Model):
     name = db.Column(db.String(128), unique=True, nullable=False)
     email = db.Column(db.String(128))
     whatsapp = db.Column(db.String(20))
+    area = db.Column(db.String(128))
     
     targets = db.relationship('Target', backref='distributor', lazy=True, cascade="all, delete-orphan")
     actuals = db.relationship('Actual', backref='distributor', lazy=True, cascade="all, delete-orphan")

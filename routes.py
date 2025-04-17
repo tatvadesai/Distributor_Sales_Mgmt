@@ -131,6 +131,7 @@ def new_distributor():
         name = request.form.get('name')
         email = request.form.get('email')
         whatsapp = request.form.get('whatsapp')
+        area = request.form.get('area')
         
         # Validate name uniqueness
         existing = Distributor.query.filter(db.func.lower(Distributor.name) == db.func.lower(name)).first()
@@ -138,7 +139,7 @@ def new_distributor():
             flash('Distributor name already exists.', 'danger')
             return render_template('distributor_form.html')
         
-        distributor = Distributor(name=name, email=email, whatsapp=whatsapp)
+        distributor = Distributor(name=name, email=email, whatsapp=whatsapp, area=area)
         db.session.add(distributor)
         
         try:
@@ -160,6 +161,7 @@ def edit_distributor(id):
         name = request.form.get('name')
         email = request.form.get('email')
         whatsapp = request.form.get('whatsapp')
+        area = request.form.get('area')
         
         # Validate name uniqueness (excluding current distributor)
         existing = Distributor.query.filter(
@@ -174,6 +176,7 @@ def edit_distributor(id):
         distributor.name = name
         distributor.email = email
         distributor.whatsapp = whatsapp
+        distributor.area = area
         
         try:
             db.session.commit()
