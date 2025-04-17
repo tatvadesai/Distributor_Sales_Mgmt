@@ -74,8 +74,8 @@ def format_date(value, format='%Y-%m-%d'):
 @app.template_filter('format_currency')
 def format_currency(value):
     if value is not None:
-        return f"₹{value:,.2f}" if value else "₹0.00"
-    return "₹0.00"
+        return f"{value:,.2f} cases" if value else "0.00 cases"
+    return "0.00 cases"
 
 @app.template_filter('format_percent')
 def format_percent(value):

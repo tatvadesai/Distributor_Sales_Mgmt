@@ -249,10 +249,10 @@ def generate_pdf_report(distributor_name, period_type, period_identifier, perfor
     # Performance data table
     data = [
         ['Metric', 'Value'],
-        ['Target', f"₹{performance_data['target']:,.2f}"],
-        ['Actual', f"₹{performance_data['actual']:,.2f}"],
-        ['Achievement', f"₹{performance_data['achievement_amount']:,.2f} ({performance_data['achievement_percent']:.2f}%)"],
-        ['Shortfall', f"₹{performance_data['shortfall']:,.2f}"]
+        ['Target', f"{performance_data['target']:,.2f} cases"],
+        ['Actual', f"{performance_data['actual']:,.2f} cases"],
+        ['Achievement', f"{performance_data['achievement_amount']:,.2f} cases ({performance_data['achievement_percent']:.2f}%)"],
+        ['Shortfall', f"{performance_data['shortfall']:,.2f} cases"]
     ]
     
     table = Table(data, colWidths=[200, 200])
@@ -302,11 +302,11 @@ def generate_excel_report(distributor_name, period_type, period_identifier, perf
     df = pd.DataFrame({
         'Metric': ['Target', 'Actual', 'Achievement Amount', 'Achievement Percent', 'Shortfall'],
         'Value': [
-            f"₹{performance_data['target']:,.2f}",
-            f"₹{performance_data['actual']:,.2f}",
-            f"₹{performance_data['achievement_amount']:,.2f}",
+            f"{performance_data['target']:,.2f} cases",
+            f"{performance_data['actual']:,.2f} cases",
+            f"{performance_data['achievement_amount']:,.2f} cases",
             f"{performance_data['achievement_percent']:.2f}%",
-            f"₹{performance_data['shortfall']:,.2f}"
+            f"{performance_data['shortfall']:,.2f} cases"
         ]
     })
     
