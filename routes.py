@@ -8,8 +8,9 @@ import logging
 from app import app, db
 from models import User, Distributor, Target, Actual
 from utils import (
-    calculate_periods, get_current_week_start, generate_performance_data,
-    generate_pdf_report, generate_excel_report, send_email_report
+    calculate_periods, get_current_week_start, get_current_week_end, 
+    generate_performance_data, generate_pdf_report, generate_excel_report, 
+    send_email_report
 )
 
 # Add current datetime to all templates

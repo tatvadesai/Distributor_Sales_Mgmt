@@ -16,7 +16,8 @@
                         <thead class="table-dark">
                             <tr>
                                 <th>Distributor</th>
-                                <th>Week Start</th>
+                                <th>Period Start</th>
+                                <th>Period End</th>
                                 <th>Month</th>
                                 <th>Quarter</th>
                                 <th>Year</th>
@@ -30,6 +31,7 @@
                                     <tr>
                                         <td>{{ actual.distributor.name }}</td>
                                         <td>{{ actual.week_start_date|format_date }}</td>
+                                        <td>{{ actual.week_end_date|format_date }}</td>
                                         <td>{{ actual.month }}</td>
                                         <td>{{ actual.quarter }}</td>
                                         <td>{{ actual.year }}</td>
@@ -51,7 +53,7 @@
                                                             <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                                                         </div>
                                                         <div class="modal-body">
-                                                            Are you sure you want to delete the sales record for <strong>{{ actual.distributor.name }}</strong> for the week of <strong>{{ actual.week_start_date|format_date }}</strong>?
+                                                            Are you sure you want to delete the sales record for <strong>{{ actual.distributor.name }}</strong> for the period <strong>{{ actual.week_start_date|format_date }}</strong> to <strong>{{ actual.week_end_date|format_date }}</strong>?
                                                         </div>
                                                         <div class="modal-footer">
                                                             <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
@@ -67,7 +69,7 @@
                                 {% endfor %}
                             {% else %}
                                 <tr>
-                                    <td colspan="7" class="text-center">No sales records found. Log your first sales!</td>
+                                    <td colspan="8" class="text-center">No sales records found. Log your first sales!</td>
                                 </tr>
                             {% endif %}
                         </tbody>
