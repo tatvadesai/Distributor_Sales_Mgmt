@@ -1,0 +1,221 @@
+{% extends "layout.html" %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-md-12">
+        <div class="card shadow">
+            <div class="card-header bg-primary text-white">
+                <h5 class="mb-0"><i class="fas fa-file-alt me-2"></i>Reports</h5>
+            </div>
+            <div class="card-body">
+                <form id="reportForm" class="mb-4">
+                    <div class="row g-3">
+                        <div class="col-md-3">
+                            <label for="distributor_id" class="form-label">Distributor <span class="text-danger">*</span></label>
+                            <select class="form-select" id="distributor_id" name="distributor_id" required>
+                                <option value="">Select Distributor</option>
+                                {% for distributor in distributors %}
+                                    <option value="{{ distributor.id }}" {% if selected_distributor_id|int == distributor.id %}selected{% endif %}>
+                                        {{ distributor.name }}
+                                    </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        
+                        <div class="col-md-3">
+                            <label for="period_type" class="form-label">Period Type <span class="text-danger">*</span></label>
+                            <select class="form-select" id="period_type" name="period_type" required onchange="updatePeriodOptions()">
+                                <option value="Weekly" {% if period_type == 'Weekly' %}selected{% endif %}>Weekly</option>
+                                <option value="Monthly" {% if period_type == 'Monthly' %}selected{% endif %}>Monthly</option>
+                                <option value="Quarterly" {% if period_type == 'Quarterly' %}selected{% endif %}>Quarterly</option>
+                                <option value="Yearly" {% if period_type == 'Yearly' %}selected{% endif %}>Yearly</option>
+                            </select>
+                        </div>
+                        
+                        <div class="col-md-3">
+                            <label for="period_identifier" class="form-label">Period <span class="text-danger">*</span></label>
+                            <select class="form-select" id="period_identifier" name="period_identifier" required>
+                                {% for period in period_options[period_type] %}
+                                    <option value="{{ period }}" {% if period == period_identifier %}selected{% endif %}>{{ period }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                    </div>
+                </form>
+                
+                <div class="card mb-4">
+                    <div class="card-header bg-light">
+                        <h6 class="mb-0"><i class="fas fa-download me-2"></i>Generate Reports</h6>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="card h-100">
+                                    <div class="card-body text-center">
+                                        <i class="fas fa-file-pdf fa-4x text-danger mb-3"></i>
+                                        <h5>PDF Report</h5>
+                                        <p class="text-muted">Generate a printable PDF report with performance metrics.</p>
+                                        <form action="{{ url_for('generate_report', report_type='pdf') }}" method="post" onsubmit="return validateForm(this)">
+                                            <input type="hidden" name="distributor_id" id="pdf_distributor_id">
+                                            <input type="hidden" name="period_type" id="pdf_period_type">
+                                            <input type="hidden" name="period_identifier" id="pdf_period_identifier">
+                                            <button type="submit" class="btn btn-outline-danger">
+                                                <i class="fas fa-file-pdf me-1"></i>Download PDF
+                                            </button>
+                                        </form>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="col-md-6">
+                                <div class="card h-100">
+                                    <div class="card-body text-center">
+                                        <i class="fas fa-file-excel fa-4x text-success mb-3"></i>
+                                        <h5>Excel Report</h5>
+                                        <p class="text-muted">Generate a detailed Excel report for further analysis.</p>
+                                        <form action="{{ url_for('generate_report', report_type='excel') }}" method="post" onsubmit="return validateForm(this)">
+                                            <input type="hidden" name="distributor_id" id="excel_distributor_id">
+                                            <input type="hidden" name="period_type" id="excel_period_type">
+                                            <input type="hidden" name="period_identifier" id="excel_period_identifier">
+                                            <button type="submit" class="btn btn-outline-success">
+                                                <i class="fas fa-file-excel me-1"></i>Download Excel
+                                            </button>
+                                        </form>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="card">
+                    <div class="card-header bg-light">
+                        <h6 class="mb-0"><i class="fas fa-paper-plane me-2"></i>Send Reports</h6>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="card h-100">
+                                    <div class="card-body text-center">
+                                        <i class="fas fa-envelope fa-4x text-primary mb-3"></i>
+                                        <h5>Email Report</h5>
+                                        <p class="text-muted">Send PDF and Excel reports directly to the distributor's email.</p>
+                                        <form action="{{ url_for('send_email_report_route') }}" method="post" onsubmit="return validateEmailForm(this)">
+                                            <input type="hidden" name="distributor_id" id="email_distributor_id">
+                                            <input type="hidden" name="period_type" id="email_period_type">
+                                            <input type="hidden" name="period_identifier" id="email_period_identifier">
+                                            <button type="submit" class="btn btn-outline-primary">
+                                                <i class="fas fa-envelope me-1"></i>Send Email
+                                            </button>
+                                        </form>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="col-md-6">
+                                <div class="card h-100 bg-light">
+                                    <div class="card-body text-center">
+                                        <i class="fab fa-whatsapp fa-4x text-success mb-3"></i>
+                                        <h5>WhatsApp Report</h5>
+                                        <p class="text-muted">Send a summary and link to reports via WhatsApp.</p>
+                                        <button class="btn btn-outline-success" disabled>
+                                            <i class="fab fa-whatsapp me-1"></i>Send WhatsApp (Coming Soon)
+                                        </button>
+                                        <div class="mt-2">
+                                            <small class="text-muted">Twilio integration required</small>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function updatePeriodOptions() {
+    const periodType = document.getElementById('period_type').value;
+    
+    fetch(`/api/periods/${periodType}`)
+        .then(response => response.json())
+        .then(periods => {
+            const periodSelect = document.getElementById('period_identifier');
+            periodSelect.innerHTML = '';
+            
+            periods.forEach(period => {
+                const option = document.createElement('option');
+                option.value = period;
+                option.textContent = period;
+                periodSelect.appendChild(option);
+            });
+        });
+}
+
+function validateForm(form) {
+    const distributor_id = document.getElementById('distributor_id').value;
+    const period_type = document.getElementById('period_type').value;
+    const period_identifier = document.getElementById('period_identifier').value;
+    
+    if (!distributor_id || !period_type || !period_identifier) {
+        alert('Please select a distributor, period type, and period.');
+        return false;
+    }
+    
+    // Set hidden form values
+    const prefix = form.getAttribute('action').includes('pdf') ? 'pdf_' : 'excel_';
+    document.getElementById(prefix + 'distributor_id').value = distributor_id;
+    document.getElementById(prefix + 'period_type').value = period_type;
+    document.getElementById(prefix + 'period_identifier').value = period_identifier;
+    
+    return true;
+}
+
+function validateEmailForm(form) {
+    const distributor_id = document.getElementById('distributor_id').value;
+    const period_type = document.getElementById('period_type').value;
+    const period_identifier = document.getElementById('period_identifier').value;
+    
+    if (!distributor_id || !period_type || !period_identifier) {
+        alert('Please select a distributor, period type, and period.');
+        return false;
+    }
+    
+    // Check if the distributor has an email address
+    const distributorSelect = document.getElementById('distributor_id');
+    const selectedOption = distributorSelect.options[distributorSelect.selectedIndex];
+    const distributorName = selectedOption.text;
+    
+    // Set hidden form values
+    document.getElementById('email_distributor_id').value = distributor_id;
+    document.getElementById('email_period_type').value = period_type;
+    document.getElementById('email_period_identifier').value = period_identifier;
+    
+    return true;
+}
+
+// Initialize values when page loads
+document.addEventListener('DOMContentLoaded', function() {
+    // Initialize hidden form fields
+    const distributor_id = document.getElementById('distributor_id').value;
+    const period_type = document.getElementById('period_type').value;
+    const period_identifier = document.getElementById('period_identifier').value;
+    
+    document.getElementById('pdf_distributor_id').value = distributor_id;
+    document.getElementById('pdf_period_type').value = period_type;
+    document.getElementById('pdf_period_identifier').value = period_identifier;
+    
+    document.getElementById('excel_distributor_id').value = distributor_id;
+    document.getElementById('excel_period_type').value = period_type;
+    document.getElementById('excel_period_identifier').value = period_identifier;
+    
+    document.getElementById('email_distributor_id').value = distributor_id;
+    document.getElementById('email_period_type').value = period_type;
+    document.getElementById('email_period_identifier').value = period_identifier;
+});
+</script>
+{% endblock %}

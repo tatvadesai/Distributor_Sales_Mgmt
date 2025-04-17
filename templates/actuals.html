@@ -1,0 +1,80 @@
+{% extends "layout.html" %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-md-12">
+        <div class="card shadow">
+            <div class="card-header d-flex justify-content-between align-items-center bg-primary text-white">
+                <h5 class="mb-0"><i class="fas fa-cash-register me-2"></i>Actual Sales</h5>
+                <a href="{{ url_for('new_actual') }}" class="btn btn-sm btn-light">
+                    <i class="fas fa-plus me-1"></i>Log New Sales
+                </a>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-hover table-striped">
+                        <thead class="table-dark">
+                            <tr>
+                                <th>Distributor</th>
+                                <th>Week Start</th>
+                                <th>Month</th>
+                                <th>Quarter</th>
+                                <th>Year</th>
+                                <th class="text-end">Actual Sales</th>
+                                <th class="text-end">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% if actuals %}
+                                {% for actual in actuals %}
+                                    <tr>
+                                        <td>{{ actual.distributor.name }}</td>
+                                        <td>{{ actual.week_start_date|format_date }}</td>
+                                        <td>{{ actual.month }}</td>
+                                        <td>{{ actual.quarter }}</td>
+                                        <td>{{ actual.year }}</td>
+                                        <td class="text-end">{{ actual.actual_sales|format_currency }}</td>
+                                        <td class="text-end">
+                                            <a href="{{ url_for('edit_actual', id=actual.id) }}" class="btn btn-sm btn-primary">
+                                                <i class="fas fa-edit"></i>
+                                            </a>
+                                            <button type="button" class="btn btn-sm btn-danger" data-bs-toggle="modal" data-bs-target="#deleteModal{{ actual.id }}">
+                                                <i class="fas fa-trash"></i>
+                                            </button>
+                                            
+                                            <!-- Delete Confirmation Modal -->
+                                            <div class="modal fade" id="deleteModal{{ actual.id }}" tabindex="-1" aria-labelledby="deleteModalLabel{{ actual.id }}" aria-hidden="true">
+                                                <div class="modal-dialog">
+                                                    <div class="modal-content">
+                                                        <div class="modal-header bg-danger text-white">
+                                                            <h5 class="modal-title" id="deleteModalLabel{{ actual.id }}">Confirm Delete</h5>
+                                                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                                                        </div>
+                                                        <div class="modal-body">
+                                                            Are you sure you want to delete the sales record for <strong>{{ actual.distributor.name }}</strong> for the week of <strong>{{ actual.week_start_date|format_date }}</strong>?
+                                                        </div>
+                                                        <div class="modal-footer">
+                                                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                                                            <form action="{{ url_for('delete_actual', id=actual.id) }}" method="POST">
+                                                                <button type="submit" class="btn btn-danger">Delete</button>
+                                                            </form>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                {% endfor %}
+                            {% else %}
+                                <tr>
+                                    <td colspan="7" class="text-center">No sales records found. Log your first sales!</td>
+                                </tr>
+                            {% endif %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

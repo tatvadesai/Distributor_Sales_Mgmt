@@ -1,0 +1,84 @@
+{% extends "layout.html" %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-8">
+        <div class="card shadow">
+            <div class="card-header bg-primary text-white">
+                <h5 class="mb-0">
+                    <i class="fas fa-{% if actual %}edit{% else %}plus{% endif %} me-2"></i>
+                    {% if actual %}Edit{% else %}Log New{% endif %} Sales
+                </h5>
+            </div>
+            <div class="card-body">
+                <form method="POST" action="{{ url_for('edit_actual', id=actual.id) if actual else url_for('new_actual') }}">
+                    <div class="mb-3">
+                        <label for="distributor_id" class="form-label">Distributor <span class="text-danger">*</span></label>
+                        <select class="form-select" id="distributor_id" name="distributor_id" required>
+                            <option value="">Select Distributor</option>
+                            {% for distributor in distributors %}
+                                <option value="{{ distributor.id }}" {% if actual and actual.distributor_id == distributor.id %}selected{% endif %}>
+                                    {{ distributor.name }}
+                                </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="week_start_date" class="form-label">Week Start Date (Monday) <span class="text-danger">*</span></label>
+                        <input type="date" class="form-control" id="week_start_date" name="week_start_date" 
+                               value="{{ actual.week_start_date if actual else current_week_start }}" required>
+                        <div class="form-text">Select Monday of the week for which sales are being logged.</div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="actual_sales" class="form-label">Actual Sales <span class="text-danger">*</span></label>
+                        <div class="input-group">
+                            <span class="input-group-text">₹</span>
+                            <input type="number" step="0.01" min="0" class="form-control" id="actual_sales" name="actual_sales" value="{{ actual.actual_sales if actual else '' }}" required>
+                        </div>
+                    </div>
+                    
+                    <div class="d-flex justify-content-between">
+                        <a href="{{ url_for('actuals') }}" class="btn btn-secondary">
+                            <i class="fas fa-arrow-left me-1"></i>Back
+                        </a>
+                        <button type="submit" class="btn btn-primary">
+                            <i class="fas fa-save me-1"></i>Save
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Ensure the week_start_date is a Monday
+    const dateInput = document.getElementById('week_start_date');
+    
+    dateInput.addEventListener('change', function() {
+        const selectedDate = new Date(this.value);
+        const dayOfWeek = selectedDate.getDay(); // 0 = Sunday, 1 = Monday, ...
+        
+        // If not Monday (1)
+        if (dayOfWeek !== 1) {
+            // Calculate the previous Monday
+            const prevMonday = new Date(selectedDate);
+            prevMonday.setDate(selectedDate.getDate() - (dayOfWeek === 0 ? 6 : dayOfWeek - 1));
+            
+            // Format as YYYY-MM-DD
+            const month = String(prevMonday.getMonth() + 1).padStart(2, '0');
+            const day = String(prevMonday.getDate()).padStart(2, '0');
+            const formattedDate = `${prevMonday.getFullYear()}-${month}-${day}`;
+            
+            this.value = formattedDate;
+            alert("Date automatically adjusted to the Monday of the selected week.");
+        }
+    });
+});
+</script>
+{% endblock %}
