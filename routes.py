@@ -354,10 +354,11 @@ def new_actual():
     if request.method == 'POST':
         distributor_id = request.form.get('distributor_id')
         week_start_date = request.form.get('week_start_date')
+        week_end_date = request.form.get('week_end_date')
         actual_sales = request.form.get('actual_sales')
         
         # Validate inputs
-        if not all([distributor_id, week_start_date, actual_sales]):
+        if not all([distributor_id, week_start_date, week_end_date, actual_sales]):
             flash('All fields are required', 'danger')
             return render_template('actual_form.html', distributors=distributors)
         
@@ -365,11 +366,12 @@ def new_actual():
             # Check for duplicate entries
             existing = Actual.query.filter_by(
                 distributor_id=distributor_id,
-                week_start_date=week_start_date
+                week_start_date=week_start_date,
+                week_end_date=week_end_date
             ).first()
             
             if existing:
-                flash('Sales already logged for this distributor/week.', 'danger')
+                flash('Sales already logged for this distributor and period.', 'danger')
                 return render_template('actual_form.html', distributors=distributors)
             
             # Calculate period identifiers (month, quarter, year)
@@ -379,6 +381,7 @@ def new_actual():
             actual = Actual(
                 distributor_id=distributor_id,
                 week_start_date=week_start_date,
+                week_end_date=week_end_date,
                 actual_sales=float(actual_sales),
                 month=month,
                 quarter=quarter,
@@ -396,8 +399,11 @@ def new_actual():
     
     # Default to current week
     current_week_start = get_current_week_start()
+    current_week_end = get_current_week_end()
     
-    return render_template('actual_form.html', distributors=distributors, current_week_start=current_week_start)
+    return render_template('actual_form.html', distributors=distributors, 
+                          current_week_start=current_week_start,
+                          current_week_end=current_week_end)
 
 @app.route('/actuals/<int:id>/edit', methods=['GET', 'POST'])
 @login_required
@@ -408,10 +414,11 @@ def edit_actual(id):
     if request.method == 'POST':
         distributor_id = request.form.get('distributor_id')
         week_start_date = request.form.get('week_start_date')
+        week_end_date = request.form.get('week_end_date')
         actual_sales = request.form.get('actual_sales')
         
         # Validate inputs
-        if not all([distributor_id, week_start_date, actual_sales]):
+        if not all([distributor_id, week_start_date, week_end_date, actual_sales]):
             flash('All fields are required', 'danger')
             return render_template('actual_form.html', actual=actual, distributors=distributors)
         
@@ -419,11 +426,12 @@ def edit_actual(id):
             # Check for duplicate entries (excluding current)
             existing = Actual.query.filter_by(
                 distributor_id=distributor_id,
-                week_start_date=week_start_date
+                week_start_date=week_start_date,
+                week_end_date=week_end_date
             ).filter(Actual.id != id).first()
             
             if existing:
-                flash('Sales already logged for this distributor/week.', 'danger')
+                flash('Sales already logged for this distributor and period.', 'danger')
                 return render_template('actual_form.html', actual=actual, distributors=distributors)
             
             # Calculate period identifiers (month, quarter, year)
@@ -432,6 +440,7 @@ def edit_actual(id):
             # Update actual
             actual.distributor_id = distributor_id
             actual.week_start_date = week_start_date
+            actual.week_end_date = week_end_date
             actual.actual_sales = float(actual_sales)
             actual.month = month
             actual.quarter = quarter

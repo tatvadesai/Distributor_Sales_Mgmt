@@ -34,6 +34,11 @@ def get_current_week_start():
     today = datetime.now()
     return (today - timedelta(days=today.weekday())).strftime('%Y-%m-%d')
 
+def get_current_week_end():
+    """Get the Sunday of the current week"""
+    today = datetime.now()
+    return (today + timedelta(days=6-today.weekday())).strftime('%Y-%m-%d')
+
 def get_period_weeks(period_type, period_identifier):
     """
     Get list of week start dates for a given period
