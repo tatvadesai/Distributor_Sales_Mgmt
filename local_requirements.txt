@@ -13,3 +13,6 @@ reportlab==4.0.7
 python-dotenv==1.0.0
 supabase==1.0.3
 APScheduler==3.10.1
+# Testing dependencies
+pytest>=7.0.0
+pytest-flask>=1.2.0

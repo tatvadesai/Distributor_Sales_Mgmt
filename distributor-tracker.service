@@ -1,0 +1,15 @@
+[Unit]
+Description=Distributor Sales Tracker Application
+After=network.target
+
+[Service]
+User=www-data
+Group=www-data
+WorkingDirectory=/var/www/distributor-tracker
+ExecStart=/var/www/distributor-tracker/venv/bin/gunicorn --workers 2 --bind 0.0.0.0:8080 --access-logfile /var/log/distributor-tracker/access.log --error-logfile /var/log/distributor-tracker/error.log wsgi:app
+Restart=always
+Environment="PATH=/var/www/distributor-tracker/venv/bin"
+EnvironmentFile=/var/www/distributor-tracker/.env.production
+
+[Install]
+WantedBy=multi-user.target 
