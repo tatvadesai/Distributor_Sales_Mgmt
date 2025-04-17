@@ -14,20 +14,30 @@ import logging
 
 def calculate_periods(week_start_date_str):
     """
-    Calculate month, quarter, and year from week start date
+    Calculate month, quarter, and year for a given week start date
+    Now supporting financial years (April-March)
     
     Args:
-        week_start_date_str (str): Date in 'YYYY-MM-DD' format
+        week_start_date_str (str): Week start date in 'YYYY-MM-DD' format
         
     Returns:
-        tuple: (month_str, quarter_str, year_str)
+        tuple: (month, quarter, year) as strings
     """
-    week_start_dt = datetime.strptime(week_start_date_str, "%Y-%m-%d")
-    month_str = week_start_dt.strftime("%b-%Y")  # e.g., Apr-2025
-    year_str = str(week_start_dt.year)  # e.g., 2025
-    quarter_num = ((week_start_dt.month - 1) // 3) + 1
-    quarter_str = f"Q{quarter_num}-{year_str}"  # e.g., Q2-2025
-    return month_str, quarter_str, year_str
+    try:
+        dt = datetime.strptime(week_start_date_str, '%Y-%m-%d')
+        
+        # Get financial year, quarter and month
+        fin_year = get_financial_year(dt)
+        fin_quarter = get_financial_quarter(dt)
+        fin_month = get_financial_month(dt)
+        
+        return fin_month, fin_quarter, fin_year
+    except Exception as e:
+        # Fallback to standard calendar periods if there's an error
+        month = dt.strftime('%b-%Y')
+        quarter = f"Q{((dt.month - 1) // 3) + 1}-{dt.year}"
+        year = str(dt.year)
+        return month, quarter, year
 
 def get_current_week_start():
     """Get the Monday of the current week"""
@@ -198,10 +208,36 @@ def generate_performance_data(distributor_id, period_type, period_identifier, db
             actual_query = Actual.query.filter_by(year=period_identifier)
     
     # Get total target
-    total_target = db.session.query(func.sum(Target.target_value)).select_from(target_query.subquery()).scalar() or 0
+    total_target = db.session.query(func.sum(Target.target_value)).filter(
+        Target.period_type == period_type,
+        Target.period_identifier == period_identifier
+    )
+    
+    if distributor_id:
+        total_target = total_target.filter(Target.distributor_id == distributor_id)
+    
+    total_target = total_target.scalar() or 0
     
     # Get total actual
-    total_actual = db.session.query(func.sum(Actual.actual_sales)).select_from(actual_query.subquery()).scalar() or 0
+    total_actual = db.session.query(func.sum(Actual.actual_sales))
+    
+    if distributor_id:
+        total_actual = total_actual.filter(Actual.distributor_id == distributor_id)
+    
+    if period_type == 'Weekly':
+        week_date = get_period_weeks(period_type, period_identifier)[0] if get_period_weeks(period_type, period_identifier) else None
+        if week_date:
+            total_actual = total_actual.filter(Actual.week_start_date == week_date)
+        else:
+            total_actual = total_actual.filter(Actual.id == -1)  # No results if invalid
+    elif period_type == 'Monthly':
+        total_actual = total_actual.filter(Actual.month == period_identifier)
+    elif period_type == 'Quarterly':
+        total_actual = total_actual.filter(Actual.quarter == period_identifier)
+    elif period_type == 'Yearly':
+        total_actual = total_actual.filter(Actual.year == period_identifier)
+    
+    total_actual = total_actual.scalar() or 0
     
     # Calculate achievement
     achievement_amount = total_actual
@@ -395,3 +431,234 @@ def send_email_report(recipient_email, distributor_name, period_type, period_ide
     except Exception as e:
         logging.error(f"Failed to send email: {str(e)}")
         return False
+
+def get_financial_year(date=None):
+    """
+    Get the financial year for a given date (April to March)
+    Financial year is represented as FY24-25 for April 2024 to March 2025
+    
+    Args:
+        date (datetime, optional): Date to calculate financial year for. Defaults to current date.
+        
+    Returns:
+        str: Financial year in format "FY24-25"
+    """
+    if date is None:
+        date = datetime.now()
+    
+    if date.month >= 4:  # April onwards is next financial year
+        fy_start = date.year
+    else:
+        fy_start = date.year - 1
+    
+    # Format as FY24-25
+    return f"FY{str(fy_start)[-2:]}-{str(fy_start+1)[-2:]}"
+
+def get_financial_quarter(date=None):
+    """
+    Get the financial quarter for a given date
+    Q1: Apr-Jun, Q2: Jul-Sep, Q3: Oct-Dec, Q4: Jan-Mar
+    
+    Args:
+        date (datetime, optional): Date to calculate financial quarter for. Defaults to current date.
+        
+    Returns:
+        str: Financial quarter in format "Q1-FY24-25"
+    """
+    if date is None:
+        date = datetime.now()
+    
+    # Financial year quarters
+    if date.month >= 4 and date.month <= 6:
+        quarter = 1
+    elif date.month >= 7 and date.month <= 9:
+        quarter = 2
+    elif date.month >= 10 and date.month <= 12:
+        quarter = 3
+    else:  # Jan-Mar
+        quarter = 4
+    
+    fy = get_financial_year(date)
+    return f"Q{quarter}-{fy}"
+
+def get_financial_month(date=None):
+    """
+    Get the financial month for a given date with financial year
+    
+    Args:
+        date (datetime, optional): Date to calculate financial month for. Defaults to current date.
+        
+    Returns:
+        str: Financial month in format "Apr-FY24-25"
+    """
+    if date is None:
+        date = datetime.now()
+    
+    month_names = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+    month_name = month_names[date.month - 1]
+    
+    fy = get_financial_year(date)
+    return f"{month_name}-{fy}"
+
+def get_all_financial_years(start_year=None, end_year=2035):
+    """
+    Get a list of all financial years from start year to end year
+    
+    Args:
+        start_year (int, optional): Start year. Defaults to 3 years ago.
+        end_year (int, optional): End year. Defaults to 2035.
+        
+    Returns:
+        list: List of financial years in format "FY24-25"
+    """
+    if start_year is None:
+        # Start 3 years ago by default
+        start_year = datetime.now().year - 3
+    
+    financial_years = []
+    for year in range(start_year, end_year + 1):
+        financial_years.append(f"FY{str(year)[-2:]}-{str(year+1)[-2:]}")
+    
+    return financial_years
+
+def get_financial_quarter_dates(fy_quarter):
+    """
+    Get the start and end dates for a financial quarter
+    
+    Args:
+        fy_quarter (str): Financial quarter in format "Q1-FY24-25"
+        
+    Returns:
+        tuple: (start_date, end_date) as datetime objects
+    """
+    parts = fy_quarter.split('-')
+    quarter = int(parts[0][1])
+    fy_start = int('20' + parts[1][2:4])  # Convert FY24-25 to year 2024
+    
+    if quarter == 1:  # Apr-Jun
+        return (
+            datetime(fy_start, 4, 1),
+            datetime(fy_start, 6, 30)
+        )
+    elif quarter == 2:  # Jul-Sep
+        return (
+            datetime(fy_start, 7, 1),
+            datetime(fy_start, 9, 30)
+        )
+    elif quarter == 3:  # Oct-Dec
+        return (
+            datetime(fy_start, 10, 1),
+            datetime(fy_start, 12, 31)
+        )
+    else:  # Q4: Jan-Mar
+        return (
+            datetime(fy_start + 1, 1, 1),
+            datetime(fy_start + 1, 3, 31)
+        )
+
+def test_email_config():
+    """
+    Test the email configuration by checking if required environment variables are set
+    
+    Returns:
+        dict: Email configuration status with keys:
+            - is_configured: bool indicating if email is configured
+            - smtp_server: SMTP server address
+            - smtp_port: SMTP port
+            - username: Username for SMTP (partially masked)
+            - error: Error message if any
+    """
+    result = {
+        'is_configured': False,
+        'smtp_server': os.environ.get('SMTP_SERVER', 'smtp.gmail.com'),
+        'smtp_port': os.environ.get('SMTP_PORT', 587),
+        'username': None,
+        'error': None
+    }
+    
+    # Check if credentials are set
+    smtp_username = os.environ.get('SMTP_USERNAME', '')
+    smtp_password = os.environ.get('SMTP_PASSWORD', '')
+    
+    if not smtp_username or not smtp_password:
+        result['error'] = "Email credentials not configured. Set SMTP_USERNAME and SMTP_PASSWORD environment variables."
+        return result
+    
+    # Mask the username for security (show first 3 chars and domain)
+    if '@' in smtp_username:
+        user, domain = smtp_username.split('@', 1)
+        if len(user) > 3:
+            masked_user = user[:3] + '*' * (len(user) - 3)
+        else:
+            masked_user = user
+        result['username'] = f"{masked_user}@{domain}"
+    else:
+        result['username'] = smtp_username[:3] + '*' * (len(smtp_username) - 3) if len(smtp_username) > 3 else smtp_username
+    
+    # Try to connect to the SMTP server
+    try:
+        with smtplib.SMTP(result['smtp_server'], int(result['smtp_port'])) as server:
+            server.ehlo()
+            server.starttls()
+            server.ehlo()
+            server.login(smtp_username, smtp_password)
+            result['is_configured'] = True
+    except Exception as e:
+        result['error'] = f"Error connecting to SMTP server: {str(e)}"
+    
+    return result
+
+def send_test_email(recipient_email):
+    """
+    Send a test email to verify email configuration
+    
+    Args:
+        recipient_email (str): Email address to send test to
+        
+    Returns:
+        dict: Result with keys:
+            - success: bool indicating if email sent successfully
+            - message: Status message
+    """
+    try:
+        # Create message container
+        msg = MIMEMultipart()
+        msg['From'] = os.environ.get('EMAIL_FROM', 'noreply@example.com')
+        msg['To'] = recipient_email
+        msg['Subject'] = f"Test Email from Sales Management System"
+        
+        # Add body text
+        body = f"""
+        This is a test email from the Sales Management System.
+        
+        If you received this email, your email configuration is working correctly.
+        
+        Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+        """
+        msg.attach(MIMEText(body, 'plain'))
+        
+        # Connect to mail server and send
+        smtp_server = os.environ.get('SMTP_SERVER', 'smtp.gmail.com')
+        smtp_port = int(os.environ.get('SMTP_PORT', 587))
+        smtp_username = os.environ.get('SMTP_USERNAME', '')
+        smtp_password = os.environ.get('SMTP_PASSWORD', '')
+        
+        with smtplib.SMTP(smtp_server, smtp_port) as server:
+            server.starttls()
+            # Only login if credentials are provided
+            if smtp_username and smtp_password:
+                server.login(smtp_username, smtp_password)
+            server.send_message(msg)
+        
+        logging.info(f"Test email sent successfully to {recipient_email}")
+        return {
+            'success': True,
+            'message': f"Test email sent successfully to {recipient_email}"
+        }
+    except Exception as e:
+        error_msg = f"Failed to send test email: {str(e)}"
+        logging.error(error_msg)
+        return {
+            'success': False,
+            'message': error_msg
+        }

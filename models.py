@@ -31,6 +31,8 @@ class Target(db.Model):
     period_type = db.Column(db.String(20), nullable=False)  # 'Weekly', 'Monthly', 'Quarterly', 'Yearly'
     period_identifier = db.Column(db.String(20), nullable=False)  # 'Wk 16-2025', 'Apr-2025', 'Q2-2025', '2025'
     target_value = db.Column(db.Float, nullable=False)
+    week_start_date = db.Column(db.String(10))  # Store as 'YYYY-MM-DD' for weekly targets
+    week_end_date = db.Column(db.String(10))  # Store as 'YYYY-MM-DD' for weekly targets
     
     __table_args__ = (
         UniqueConstraint('distributor_id', 'period_type', 'period_identifier', name='uix_target_distributor_period'),

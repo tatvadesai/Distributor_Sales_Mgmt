@@ -12,6 +12,7 @@
             </div>
             <div class="card-body">
                 <form method="POST" action="{{ url_for('edit_actual', id=actual.id) if actual else url_for('new_actual') }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     <div class="mb-3">
                         <label for="distributor_id" class="form-label">Distributor <span class="text-danger">*</span></label>
                         <select class="form-select" id="distributor_id" name="distributor_id" required>

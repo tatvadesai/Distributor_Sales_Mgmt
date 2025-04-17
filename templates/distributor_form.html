@@ -12,6 +12,7 @@
             </div>
             <div class="card-body">
                 <form method="POST" action="{{ url_for('edit_distributor', id=distributor.id) if distributor else url_for('new_distributor') }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     <div class="mb-3">
                         <label for="name" class="form-label">Distributor Name <span class="text-danger">*</span></label>
                         <input type="text" class="form-control" id="name" name="name" value="{{ distributor.name if distributor else '' }}" required autocomplete="off">

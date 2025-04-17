@@ -1,92 +1,78 @@
-# Distributor Performance Tracking System
+# Distributor Sales Management System
 
-A Flask-based system for tracking distributor sales performance with territorial management, custom date ranges, and reporting capabilities.
+A comprehensive application for tracking distributor sales targets and performance.
+
+## Overview
+
+This application helps businesses track sales targets and actual performance for distributors. It provides tools for setting targets, recording actual sales, and generating reports.
 
 ## Features
 
-- User authentication system
-- Distributor management with territory assignment
-- Sales target setting by week, month, quarter, or year
-- Flexible sales data logging with customizable date ranges
-- Performance reporting with PDF and Excel exports
-- Dashboard with performance visualization
+- **User Authentication**: Secure login system
+- **Distributor Management**: Add, edit, and manage distributors
+- **Target Setting**: Set weekly, monthly, quarterly, or yearly targets
+- **Sales Tracking**: Record actual sales for each period
+- **Performance Analytics**: View performance metrics and trends
+- **Reporting**: Generate PDF and Excel reports
+- **Email Functionality**: Send reports via email
+- **Backup System**: Automated database backups
 
-## Local Setup
+## Quick Start
 
-### Prerequisites
+For non-technical users:
 
-- Python 3.11 or later
-- PostgreSQL database
+1. Double-click the `run.sh` file
+2. Open your browser and navigate to: http://localhost:8080
+3. Login with the default credentials:
+   - Username: `admin`
+   - Password: `admin123`
 
-### Installation
+For detailed installation instructions, see [INSTALL.md](INSTALL.md).
 
-1. Clone or download the repository to your local machine.
+## Screenshots
 
-2. Create a virtual environment (optional but recommended):
-   ```
-   python -m venv venv
-   source venv/bin/activate  # On Windows: venv\Scripts\activate
-   ```
+### Dashboard
+![Dashboard](/attached_assets/dashboard.png)
 
-3. Install the required packages:
-   ```
-   pip install -r local_requirements.txt
-   ```
+### Distributors
+![Distributors](/attached_assets/distributors.png)
 
-4. Set up environment variables:
-   - Create a `.env` file in the project root with:
-   ```
-   DATABASE_URL=postgresql://username:password@localhost:5432/dbname
-   SESSION_SECRET=your_secret_key_here
-   ```
+### Reports
+![Reports](/attached_assets/reports.png)
 
-5. Initialize the database:
-   ```
-   python
-   >>> from app import app, db
-   >>> with app.app_context():
-   >>>     db.create_all()
-   >>> exit()
-   ```
+## Requirements
 
-6. Run the application:
-   ```
-   python -m flask run --host=0.0.0.0 --port=5000
-   ```
-   or with Gunicorn:
-   ```
-   gunicorn --bind 0.0.0.0:5000 main:app
-   ```
+- Python 3.9 or higher
+- Flask
+- SQLAlchemy
+- Other dependencies listed in `local_requirements.txt`
 
-7. Access the application at `http://localhost:5000`
+## Usage
 
-## Default Login
+After logging in, you can:
 
-The system doesn't come with a default user. You'll need to create one in the database:
+1. **Add Distributors**: Navigate to the Distributors page to add new distributors
+2. **Set Targets**: Go to the Targets page to set performance goals
+3. **Record Sales**: Use the Actuals page to record sales achievements
+4. **View Reports**: Generate and export reports from the Reports page
 
-```python
-from app import db, app
-from models import User
-from werkzeug.security import generate_password_hash
+## Technical Information
 
-with app.app_context():
-    user = User(
-        username="admin",
-        password_hash=generate_password_hash("your_password")
-    )
-    db.session.add(user)
-    db.session.commit()
-```
+This application is built with:
+- Flask web framework
+- SQLite database (configurable)
+- SQLAlchemy ORM
+- Bootstrap for the UI
+- ReportLab for PDF generation
+- Pandas for data processing
 
-## Database Structure
+## Support
 
-- **User**: Authentication and system access
-- **Distributor**: Company information with area/territory
-- **Target**: Sales targets by period (weekly, monthly, quarterly, yearly)
-- **Actual**: Actual sales with flexible date ranges
+For assistance, please contact:
+- Email: support@pritenterprise.com
+- Phone: +1-234-567-8900
 
-## Customization
+## License
 
-- Modify templates in the `/templates` directory
-- Static assets are in the `/static` directory
-- CSS styling is primarily through Bootstrap with custom styling in `/static/css/custom.css`
+This software is proprietary and confidential.
+© 2023-2024 Prit Enterprise. All rights reserved.

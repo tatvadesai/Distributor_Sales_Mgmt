@@ -1,6 +1,7 @@
 Flask==2.3.3
 Flask-Login==0.6.2
 Flask-SQLAlchemy==3.1.1
+Flask-WTF==1.2.1
 SQLAlchemy==2.0.23
 Werkzeug==2.3.7
 email-validator==2.1.0
@@ -10,3 +11,8 @@ pandas==2.1.1
 psycopg2-binary==2.9.9
 reportlab==4.0.7
 python-dotenv==1.0.0
+supabase==1.0.3
+APScheduler==3.10.1
+# Testing dependencies
+pytest>=7.0.0
+pytest-flask>=1.2.0

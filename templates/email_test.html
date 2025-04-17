@@ -1,0 +1,68 @@
+{% extends "layout.html" %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-lg-8">
+        <div class="card shadow mb-4">
+            <div class="card-header bg-primary text-white">
+                <h5 class="mb-0"><i class="fas fa-envelope me-2"></i>Email Configuration Test</h5>
+            </div>
+            <div class="card-body">
+                <div class="mb-4">
+                    <h6>Current Configuration Status</h6>
+                    {% if config_status %}
+                        <div class="alert {% if config_status.is_configured %}alert-success{% else %}alert-warning{% endif %}">
+                            <p><strong>Status:</strong> {% if config_status.is_configured %}Configured{% else %}Not Configured{% endif %}</p>
+                            <p><strong>SMTP Server:</strong> {{ config_status.smtp_server }}</p>
+                            <p><strong>SMTP Port:</strong> {{ config_status.smtp_port }}</p>
+                            {% if config_status.username %}
+                                <p><strong>Username:</strong> {{ config_status.username }}</p>
+                            {% endif %}
+                            {% if config_status.error %}
+                                <p class="text-danger"><strong>Error:</strong> {{ config_status.error }}</p>
+                            {% endif %}
+                        </div>
+                    {% else %}
+                        <div class="alert alert-info">Email configuration status unknown.</div>
+                    {% endif %}
+                </div>
+
+                <div class="mb-4">
+                    <h6>Send Test Email</h6>
+                    <form method="POST" action="{{ url_for('test_email') }}">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <div class="mb-3">
+                            <label for="recipient_email" class="form-label">Recipient Email <span class="text-danger">*</span></label>
+                            <input type="email" class="form-control" id="recipient_email" name="recipient_email" required placeholder="Enter email to send test to">
+                        </div>
+                        <button type="submit" class="btn btn-primary" {% if config_status and not config_status.is_configured %}disabled{% endif %}>
+                            <i class="fas fa-paper-plane me-1"></i>Send Test Email
+                        </button>
+                    </form>
+                </div>
+
+                <div class="mb-4">
+                    <h6>How to Configure Email</h6>
+                    <div class="alert alert-info">
+                        <p>To set up email functionality, you need to configure the following environment variables:</p>
+                        <ul>
+                            <li><strong>SMTP_SERVER</strong>: Your SMTP server address (default: smtp.gmail.com)</li>
+                            <li><strong>SMTP_PORT</strong>: Your SMTP port (default: 587)</li>
+                            <li><strong>SMTP_USERNAME</strong>: Your email address</li>
+                            <li><strong>SMTP_PASSWORD</strong>: Your email password or app password</li>
+                            <li><strong>EMAIL_FROM</strong>: The "From" email address (defaults to SMTP_USERNAME if not set)</li>
+                        </ul>
+                        <p class="mb-0">For Gmail, you'll need to use an <a href="https://support.google.com/accounts/answer/185833" target="_blank">App Password</a> instead of your regular account password.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="text-center">
+            <a href="{{ url_for('dashboard') }}" class="btn btn-secondary">
+                <i class="fas fa-arrow-left me-1"></i>Back to Dashboard
+            </a>
+        </div>
+    </div>
+</div>
+{% endblock %} 

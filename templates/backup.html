@@ -1,0 +1,133 @@
+{% extends "layout.html" %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-lg-8">
+        <div class="card shadow mb-4">
+            <div class="card-header bg-primary text-white">
+                <h5 class="mb-0"><i class="fas fa-cloud-upload-alt me-2"></i>Database Backup Management</h5>
+            </div>
+            <div class="card-body">
+                {% if is_configured %}
+                    <div class="alert alert-info mb-4">
+                        <i class="fas fa-info-circle me-2"></i>
+                        Your application is configured for automated weekly backups to Supabase. Backups are performed every Sunday at 2:00 AM.
+                    </div>
+                    
+                    <div class="row mb-4">
+                        <div class="col-md-6">
+                            <div class="card">
+                                <div class="card-header bg-success text-white">
+                                    <h6 class="mb-0"><i class="fas fa-upload me-2"></i>Create Backup</h6>
+                                </div>
+                                <div class="card-body">
+                                    <p>Create a manual backup of your entire database to Supabase.</p>
+                                    <form method="POST">
+                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                        <button type="submit" name="perform_backup" class="btn btn-success">
+                                            <i class="fas fa-cloud-upload-alt me-1"></i>Backup Now
+                                        </button>
+                                    </form>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="col-md-6">
+                            <div class="card">
+                                <div class="card-header bg-warning text-dark">
+                                    <h6 class="mb-0"><i class="fas fa-download me-2"></i>Restore from Backup</h6>
+                                </div>
+                                <div class="card-body">
+                                    <p>Restore your database from a previous backup.</p>
+                                    
+                                    {% if available_backups %}
+                                        <form method="POST" onsubmit="return confirm('Are you sure you want to restore from this backup? All current data will be replaced.');">
+                                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                            <div class="mb-3">
+                                                <label for="backup_id" class="form-label">Select Backup</label>
+                                                <select class="form-select" id="backup_id" name="backup_id" required>
+                                                    <option value="">Select a backup...</option>
+                                                    {% for backup in available_backups %}
+                                                        <option value="{{ backup.id }}">{{ backup.timestamp }} ({{ backup.id }})</option>
+                                                    {% endfor %}
+                                                </select>
+                                            </div>
+                                            <button type="submit" name="restore_backup" class="btn btn-warning">
+                                                <i class="fas fa-cloud-download-alt me-1"></i>Restore
+                                            </button>
+                                        </form>
+                                    {% else %}
+                                        <div class="alert alert-secondary">
+                                            No backups available for restore.
+                                        </div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    {% if available_backups %}
+                        <div class="card">
+                            <div class="card-header bg-info text-white">
+                                <h6 class="mb-0"><i class="fas fa-history me-2"></i>Backup History</h6>
+                            </div>
+                            <div class="card-body">
+                                <div class="table-responsive">
+                                    <table class="table table-hover table-striped">
+                                        <thead class="table-dark">
+                                            <tr>
+                                                <th>Backup ID</th>
+                                                <th>Timestamp</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {% for backup in available_backups %}
+                                                <tr>
+                                                    <td>{{ backup.id }}</td>
+                                                    <td>{{ backup.timestamp }}</td>
+                                                </tr>
+                                            {% endfor %}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    {% endif %}
+                {% else %}
+                    <div class="alert alert-warning">
+                        <h6><i class="fas fa-exclamation-triangle me-2"></i>Supabase Not Configured</h6>
+                        <p>To enable database backups, you need to configure Supabase credentials:</p>
+                        <ol>
+                            <li>Create a Supabase account at <a href="https://supabase.com" target="_blank">https://supabase.com</a></li>
+                            <li>Create a new project</li>
+                            <li>Create a table named <code>backups</code> with the following columns:
+                                <ul>
+                                    <li><code>id</code> (type: uuid, primary key)</li>
+                                    <li><code>backup_id</code> (type: text)</li>
+                                    <li><code>table_name</code> (type: text)</li>
+                                    <li><code>timestamp</code> (type: text)</li>
+                                    <li><code>data</code> (type: text)</li>
+                                </ul>
+                            </li>
+                            <li>Get your Supabase URL and API key from the project settings</li>
+                            <li>Set the following environment variables:
+                                <ul>
+                                    <li><code>SUPABASE_URL</code>: Your Supabase project URL</li>
+                                    <li><code>SUPABASE_KEY</code>: Your Supabase API key</li>
+                                </ul>
+                            </li>
+                            <li>Restart the application</li>
+                        </ol>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+        
+        <div class="text-center">
+            <a href="{{ url_for('dashboard') }}" class="btn btn-secondary">
+                <i class="fas fa-arrow-left me-1"></i>Back to Dashboard
+            </a>
+        </div>
+    </div>
+</div>
+{% endblock %} 
