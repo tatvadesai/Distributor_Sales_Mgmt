@@ -109,15 +109,20 @@ def perform_backup():
         return False
 
 def start_backup_scheduler():
-    """Start a scheduler to run weekly backups."""
+    """Start a scheduler to run backups three times a week."""
     scheduler = BackgroundScheduler()
     
-    # Run backup every Sunday at 2 AM
-    scheduler.add_job(perform_backup, 'cron', day_of_week='sun', hour=2)
+    # Run backups three times a week:
+    # 1. Monday at 3 PM
+    # 2. Wednesday at 12 PM
+    # 3. Saturday at 11 AM
+    scheduler.add_job(perform_backup, 'cron', day_of_week='mon', hour=15)  # Monday 3 PM
+    scheduler.add_job(perform_backup, 'cron', day_of_week='wed', hour=12)  # Wednesday 12 PM
+    scheduler.add_job(perform_backup, 'cron', day_of_week='sat', hour=11)  # Saturday 11 AM
     
     # Start the scheduler
     scheduler.start()
-    logger.info("Backup scheduler started. Backups will run every Sunday at 2 AM.")
+    logger.info("Backup scheduler started. Backups will run three times a week: Monday at 3 PM, Wednesday at 12 PM, and Saturday at 11 AM.")
     
     return scheduler
 
