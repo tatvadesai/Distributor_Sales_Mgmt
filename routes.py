@@ -6,6 +6,7 @@ import io
 import logging
 from sqlalchemy import func
 import os
+import zipfile
 
 from app import app, db
 from models import User, Distributor, Target, Actual
@@ -837,6 +838,74 @@ def send_email_report_route():
     
     return redirect(url_for('reports'))
 
+@app.route('/bulk_export_reports', methods=['POST'])
+@login_required
+def bulk_export_reports():
+    period_type = request.form.get('period_type')
+    period_identifier = request.form.get('period_identifier')
+    
+    if not all([period_type, period_identifier]):
+        flash('Period type and period are required', 'danger')
+        return redirect(url_for('reports'))
+    
+    # Get all distributors
+    distributors = Distributor.query.all()
+    
+    if not distributors:
+        flash('No distributors found', 'warning')
+        return redirect(url_for('reports'))
+    
+    # Create a ZIP file with reports for all distributors
+    memory_file = io.BytesIO()
+    with zipfile.ZipFile(memory_file, 'w') as zf:
+        for distributor in distributors:
+            # Convert date range to period identifier for database query if needed
+            lookup_period_identifier = period_identifier
+            if period_type == 'Weekly' and ' to ' in period_identifier:
+                # Extract dates from the format "YYYY-MM-DD to YYYY-MM-DD"
+                dates = period_identifier.split(' to ')
+                if len(dates) == 2:
+                    # Find the target with these dates
+                    target = Target.query.filter_by(
+                        period_type='Weekly', 
+                        week_start_date=dates[0], 
+                        week_end_date=dates[1]
+                    ).first()
+                    
+                    if target:
+                        lookup_period_identifier = target.period_identifier
+                    else:
+                        # Try to calculate the week number
+                        try:
+                            start_dt = datetime.strptime(dates[0], '%Y-%m-%d')
+                            week_num = int(start_dt.strftime('%W')) + 1
+                            year = start_dt.year
+                            lookup_period_identifier = f"Wk {week_num}-{year}"
+                        except:
+                            pass
+            
+            # Get performance data
+            performance_data = generate_performance_data(distributor.id, period_type, lookup_period_identifier, db, Actual, Target)
+            
+            # Generate PDF report
+            pdf_data = generate_pdf_report(distributor.name, period_type, period_identifier, performance_data)
+            pdf_filename = f"{distributor.name}_Report_{period_identifier}.pdf"
+            zf.writestr(pdf_filename, pdf_data)
+            
+            # Generate Excel report
+            excel_data = generate_excel_report(distributor.name, period_type, period_identifier, performance_data)
+            excel_filename = f"{distributor.name}_Report_{period_identifier}.xlsx"
+            zf.writestr(excel_filename, excel_data)
+    
+    memory_file.seek(0)
+    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+    return send_file(
+        memory_file,
+        mimetype='application/zip',
+        as_attachment=True,
+        download_name=f"All_Distributors_Reports_{period_type}_{period_identifier}_{timestamp}.zip"
+    )
+
 # AJAX Routes
 @app.route('/api/periods/<period_type>')
 @login_required
@@ -958,3 +1027,63 @@ def backup_page():
         flash(error_message, 'danger')
     
     return render_template('backup.html', is_configured=is_configured, available_backups=available_backups)
+
+@app.route('/send_to_distributor', methods=['POST'])
+@login_required
+def send_to_distributor():
+    distributor_id = request.form.get('distributor_id')
+    period_type = request.form.get('period_type')
+    period_identifier = request.form.get('period_identifier')
+    
+    if not all([distributor_id, period_type, period_identifier]):
+        flash('All fields are required', 'danger')
+        return redirect(url_for('reports'))
+    
+    # Get distributor
+    distributor = Distributor.query.get_or_404(distributor_id)
+    
+    # Verify distributor has an email
+    if not distributor.email:
+        flash('Selected distributor does not have an email address', 'danger')
+        return redirect(url_for('reports'))
+    
+    # Convert date range to period identifier for database query if needed
+    lookup_period_identifier = period_identifier
+    if period_type == 'Weekly' and ' to ' in period_identifier:
+        # Extract dates from the format "YYYY-MM-DD to YYYY-MM-DD"
+        dates = period_identifier.split(' to ')
+        if len(dates) == 2:
+            # Find the target with these dates
+            target = Target.query.filter_by(
+                period_type='Weekly', 
+                week_start_date=dates[0], 
+                week_end_date=dates[1]
+            ).first()
+            
+            if target:
+                lookup_period_identifier = target.period_identifier
+            else:
+                # Try to calculate the week number
+                try:
+                    start_dt = datetime.strptime(dates[0], '%Y-%m-%d')
+                    week_num = int(start_dt.strftime('%W')) + 1
+                    year = start_dt.year
+                    lookup_period_identifier = f"Wk {week_num}-{year}"
+                except:
+                    pass
+    
+    # Get performance data
+    performance_data = generate_performance_data(distributor.id, period_type, lookup_period_identifier, db, Actual, Target)
+    
+    # Generate reports
+    pdf_data = generate_pdf_report(distributor.name, period_type, period_identifier, performance_data)
+    excel_data = generate_excel_report(distributor.name, period_type, period_identifier, performance_data)
+    
+    try:
+        # Send email with reports to distributor's email
+        send_email_report(distributor.email, distributor.name, period_type, period_identifier, pdf_data, excel_data)
+        flash(f'Reports sent successfully to {distributor.name} ({distributor.email})!', 'success')
+    except Exception as e:
+        flash(f'Error sending email: {str(e)}', 'danger')
+    
+    return redirect(url_for('reports'))
