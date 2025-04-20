@@ -1,21 +1,59 @@
 # Distributor Sales Management System
 
-A comprehensive application for tracking distributor sales targets and performance.
+A Flask-based application for managing distributor sales targets and performance.
+
+## Features
+
+- Manage distributors and their contact details
+- Set monthly sales targets
+- Record actual sales performance
+- Generate performance reports
+- User authentication
+
+## Installation
+
+1. Clone this repository
+2. Install dependencies using the provided script:
+
+```bash
+# Linux/Mac
+./install_dependencies.sh
+
+# Windows (run in Command Prompt)
+pip install flask flask-login flask-sqlalchemy SQLAlchemy werkzeug jinja2 python-dotenv
+```
+
+## Running the Application
+
+```bash
+# Set the Flask application
+export FLASK_APP=app.py
+
+# Run the development server
+flask run
+```
+
+On Windows:
+```
+set FLASK_APP=app.py
+flask run
+```
+
+The application will be available at http://127.0.0.1:5000
+
+## Date Picker Usage
+
+The application includes a date picker for selecting date ranges. Simply click the "Select Dates" button next to any date field to open the date picker.
+
+## Login
+
+Default login credentials:
+- Username: admin
+- Password: admin123
 
 ## Overview
 
 This application helps businesses track sales targets and actual performance for distributors. It provides tools for setting targets, recording actual sales, and generating reports.
-
-## Features
-
-- **User Authentication**: Secure login system
-- **Distributor Management**: Add, edit, and manage distributors
-- **Target Setting**: Set weekly, monthly, quarterly, or yearly targets
-- **Sales Tracking**: Record actual sales for each period
-- **Performance Analytics**: View performance metrics and trends
-- **Reporting**: Generate PDF and Excel reports
-- **Email Functionality**: Send reports via email
-- **Backup System**: Automated database backups
 
 ## Quick Start
 

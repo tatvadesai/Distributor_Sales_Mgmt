@@ -19,7 +19,12 @@
         </div>
         <div class="col-md-3">
             <label for="date_range" class="form-label">Date Range</label>
-            <input type="text" class="form-control" id="date_range" name="date_range" value="{{ selected_date_range }}" readonly>
+            <div class="input-group">
+                <input type="text" class="form-control" id="date_range" name="date_range" value="{{ selected_date_range }}" readonly>
+                <button type="button" id="date_picker_btn" class="btn btn-outline-secondary">
+                    <i class="fas fa-calendar-alt"></i>
+                </button>
+            </div>
         </div>
         <div class="col-md-3">
             <label for="distributor_id" class="form-label">Distributor (Optional)</label>
@@ -41,10 +46,22 @@
 </form>
 
 <script>
+let currentSelection = '';
+let datepicker;
+
 document.addEventListener('DOMContentLoaded', function() {
+    // Store original selection
+    currentSelection = document.getElementById('month').value;
+    
+    // Initialize date picker with appropriate settings
+    initializeDatepicker();
+    
     // Add event listeners
     document.getElementById('financial_year').addEventListener('change', updateMonthOptions);
-    document.getElementById('month').addEventListener('change', updateDateRange);
+    document.getElementById('month').addEventListener('change', handleMonthChange);
+    document.getElementById('date_picker_btn').addEventListener('click', function() {
+        datepicker.open();
+    });
     document.getElementById('applyFilters').addEventListener('click', function() {
         document.getElementById('filterForm').submit();
     });
@@ -57,6 +74,70 @@ document.addEventListener('DOMContentLoaded', function() {
         updateDateRange();
     }
 });
+
+function initializeDatepicker() {
+    const monthSelect = document.getElementById('month');
+    const financialYearSelect = document.getElementById('financial_year');
+    
+    if (!monthSelect.value || !financialYearSelect.value) return;
+    
+    // Get month and year information
+    const selectedMonth = monthSelect.value;
+    const financialYear = financialYearSelect.value;
+    
+    // Map month names to numbers
+    const monthMap = {
+        'Jan': 0, 'Feb': 1, 'Mar': 2, 'Apr': 3, 'May': 4, 'Jun': 5,
+        'Jul': 6, 'Aug': 7, 'Sep': 8, 'Oct': 9, 'Nov': 10, 'Dec': 11
+    };
+    
+    // Get the calendar month number (0-11)
+    const monthNum = monthMap[selectedMonth];
+    
+    // Parse the financial year to get the calendar year
+    const fy_start_year = parseInt("20" + financialYear.substring(2, 4));
+    
+    // Determine the actual calendar year for this month
+    let yearNum = monthNum >= 3 ? fy_start_year : fy_start_year + 1;
+    
+    // If we already have a datepicker instance, destroy it
+    if (datepicker) {
+        datepicker.destroy();
+    }
+    
+    // Create a new datepicker with the correct month selected
+    datepicker = flatpickr("#date_range", {
+        dateFormat: "d M",
+        defaultDate: new Date(yearNum, monthNum, 1),
+        // Set the initial display to the selected month
+        onOpen: function(selectedDates, dateStr, instance) {
+            instance.jumpToDate(new Date(yearNum, monthNum, 1));
+        },
+        onChange: function(selectedDates, dateStr, instance) {
+            if (selectedDates.length === 0) return;
+            
+            const selectedDate = selectedDates[0];
+            const start = new Date(selectedDate);
+            const end = new Date(selectedDate);
+
+            const day = selectedDate.getDay();
+            const diffToMonday = day === 0 ? -6 : 1 - day; // Sunday fix
+            start.setDate(start.getDate() + diffToMonday);
+            end.setDate(start.getDate() + 6);
+
+            const format = d => `${d.getDate().toString().padStart(2, '0')} ${['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][d.getMonth()]}`;
+            instance.input.value = `${format(start)} - ${format(end)}`;
+            
+            // Mark as user selected
+            instance.input._userSelected = true;
+        }
+    });
+}
+
+function handleMonthChange() {
+    updateDateRange();
+    initializeDatepicker();
+}
 
 function updateMonthOptions() {
     const financialYear = document.getElementById('financial_year').value;
@@ -85,8 +166,9 @@ function updateMonthOptions() {
                 monthSelect.value = months[0];
             }
             
-            // After updating months, update the date range
+            // After updating months, update the date range and re-init datepicker
             updateDateRange();
+            initializeDatepicker();
         });
 }
 
@@ -95,11 +177,29 @@ function updateDateRange() {
     const month = document.getElementById('month').value;
     
     if (financialYear && month) {
-        fetch(`/api/date_range/${financialYear}/${month}`)
+        // Get all weeks for the selected month
+        fetch(`/api/date_range/${financialYear}/${month}?all_weeks=true`)
             .then(response => response.json())
-            .then(dateRange => {
-                document.getElementById('date_range').value = dateRange;
+            .then(data => {
+                // Get the first week as default
+                const defaultRange = data.default;
+                
+                // Update the date range input
+                const dateRangeInput = document.getElementById('date_range');
+                
+                // Only update if not manually set by user
+                if (!dateRangeInput._userSelected) {
+                    dateRangeInput.value = defaultRange;
+                }
+            })
+            .catch(error => {
+                console.error('Error fetching date range:', error);
             });
     }
 }
+
+// Mark the date range as user-selected when changed
+document.getElementById('date_range').addEventListener('change', function() {
+    this._userSelected = true;
+});
 </script> 

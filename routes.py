@@ -1,5 +1,9 @@
 from flask import render_template, request, redirect, url_for, flash, jsonify, send_file
-from flask_login import login_user, logout_user, login_required, current_user
+try:
+    from flask_login import login_user, logout_user, login_required, current_user
+except ImportError:
+    # Import from app module if flask_login is not available
+    from app import login_user, logout_user, login_required, current_user
 from werkzeug.security import check_password_hash
 from datetime import datetime, timedelta
 import io
@@ -218,7 +222,7 @@ def edit_distributor(id):
     
     return render_template('distributor_form.html', distributor=distributor)
 
-@app.route('/distributors/<int:id>/delete', methods=['POST'])
+@app.route('/distributors/<int:id>/delete', methods=['GET', 'POST'])
 @login_required
 def delete_distributor(id):
     distributor = Distributor.query.get_or_404(id)

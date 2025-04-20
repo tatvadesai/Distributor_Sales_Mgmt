@@ -44,12 +44,12 @@
                         <div class="col-md-4">
                             <label for="target_date_range" class="form-label">Date Range</label>
                             <div class="input-group">
-                                <input type="text" class="form-control" id="target_date_range" name="date_range" value="{{ selected_date_range }}">
-                                <span class="input-group-text bg-primary text-white">
-                                    <i class="fas fa-calendar-alt"></i>
-                                </span>
+                                <input type="text" class="form-control" id="target_date_range" name="date_range" value="{{ selected_date_range }}" readonly>
+                                <button type="button" class="btn btn-primary" id="target_date_picker_btn">
+                                    <i class="fas fa-calendar-week me-1"></i> Select Dates
+                                </button>
                             </div>
-                            <small class="text-primary fw-bold">Click to select custom dates</small>
+                            <small class="text-primary fw-bold">Click to select a week</small>
                         </div>
                     </div>
                     
@@ -154,31 +154,33 @@ document.addEventListener('DOMContentLoaded', function() {
     // Store original selection
     currentSelection = document.getElementById('target_month').value;
     
-    // Initialize date range picker with prominent styling
-    $('#target_date_range').daterangepicker({
-        opens: 'center',
-        autoApply: false,
-        showDropdowns: true,
-        minYear: 2020,
-        maxYear: 2030,
-        ranges: {
-            'Today': [moment(), moment()],
-            'Yesterday': [moment().subtract(1, 'days'), moment().subtract(1, 'days')],
-            'Last 7 Days': [moment().subtract(6, 'days'), moment()],
-            'Last 30 Days': [moment().subtract(29, 'days'), moment()],
-            'This Month': [moment().startOf('month'), moment().endOf('month')],
-            'Last Month': [moment().subtract(1, 'month').startOf('month'), moment().subtract(1, 'month').endOf('month')]
-        },
-        locale: {
-            format: 'DD MMM - DD MMM',
-            applyLabel: "Select",
-            cancelLabel: "Cancel",
-            customRangeLabel: "Custom Range"
+    // Initialize Flatpickr for week selection
+    const targetDatepicker = flatpickr("#target_date_range", {
+        dateFormat: "d M",
+        onChange: function(selectedDates, dateStr, instance) {
+            if (selectedDates.length === 0) return;
+            
+            const selectedDate = selectedDates[0];
+            const start = new Date(selectedDate);
+            const end = new Date(selectedDate);
+
+            const day = selectedDate.getDay();
+            const diffToMonday = day === 0 ? -6 : 1 - day; // Sunday fix
+            start.setDate(start.getDate() + diffToMonday);
+            end.setDate(start.getDate() + 6);
+
+            const format = d => `${d.getDate().toString().padStart(2, '0')} ${['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][d.getMonth()]}`;
+            instance.input.value = `${format(start)} - ${format(end)}`;
+            
+            // Mark as user selected
+            instance.input._userSelected = true;
         }
     });
     
-    // Apply styling to make the date picker more prominent
-    $('.daterangepicker').addClass('border border-primary shadow-lg');
+    // Add button click handler
+    document.getElementById('target_date_picker_btn').addEventListener('click', function() {
+        targetDatepicker.open();
+    });
     
     // Initialize date range if needed
     if (document.getElementById('target_financial_year').value && 
@@ -187,16 +189,6 @@ document.addEventListener('DOMContentLoaded', function() {
         updateTargetDateRange();
     }
 });
-
-function initTargetDatePicker() {
-    $('#target_date_range').daterangepicker({
-        opens: 'left',
-        autoApply: true,
-        locale: {
-            format: 'DD MMM - DD MMM'
-        }
-    });
-}
 
 function updateTargetMonths() {
     const financialYear = document.getElementById('target_financial_year').value;
@@ -256,12 +248,6 @@ function updateTargetDateRange() {
                 // Only update if not manually set by user
                 if (!dateRangeInput._userSelected) {
                     dateRangeInput.value = defaultRange;
-                    
-                    // Reinitialize date picker with new date
-                    if ($(dateRangeInput).data('daterangepicker')) {
-                        $(dateRangeInput).data('daterangepicker').remove();
-                    }
-                    initTargetDatePicker();
                 }
             })
             .catch(error => {
