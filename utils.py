@@ -161,52 +161,6 @@ def generate_performance_data(distributor_id, period_type, period_identifier, db
     """
     from sqlalchemy import func
     
-    # Query for specific distributor or all distributors
-    if distributor_id:
-        target_query = Target.query.filter_by(
-            distributor_id=distributor_id,
-            period_type=period_type,
-            period_identifier=period_identifier
-        )
-        
-        if period_type == 'Weekly':
-            # For weekly, we need the exact week
-            actual_query = Actual.query.filter_by(
-                distributor_id=distributor_id,
-                week_start_date=get_period_weeks(period_type, period_identifier)[0] if get_period_weeks(period_type, period_identifier) else None
-            )
-        elif period_type == 'Monthly':
-            actual_query = Actual.query.filter_by(
-                distributor_id=distributor_id,
-                month=period_identifier
-            )
-        elif period_type == 'Quarterly':
-            actual_query = Actual.query.filter_by(
-                distributor_id=distributor_id,
-                quarter=period_identifier
-            )
-        elif period_type == 'Yearly':
-            actual_query = Actual.query.filter_by(
-                distributor_id=distributor_id,
-                year=period_identifier
-            )
-    else:
-        # For all distributors
-        target_query = Target.query.filter_by(
-            period_type=period_type,
-            period_identifier=period_identifier
-        )
-        
-        if period_type == 'Weekly':
-            week_date = get_period_weeks(period_type, period_identifier)[0] if get_period_weeks(period_type, period_identifier) else None
-            actual_query = Actual.query.filter_by(week_start_date=week_date) if week_date else Actual.query.filter_by(id=-1)  # No results if invalid
-        elif period_type == 'Monthly':
-            actual_query = Actual.query.filter_by(month=period_identifier)
-        elif period_type == 'Quarterly':
-            actual_query = Actual.query.filter_by(quarter=period_identifier)
-        elif period_type == 'Yearly':
-            actual_query = Actual.query.filter_by(year=period_identifier)
-    
     # Get total target
     total_target = db.session.query(func.sum(Target.target_value)).filter(
         Target.period_type == period_type,
@@ -218,26 +172,84 @@ def generate_performance_data(distributor_id, period_type, period_identifier, db
     
     total_target = total_target.scalar() or 0
     
-    # Get total actual
-    total_actual = db.session.query(func.sum(Actual.actual_sales))
-    
-    if distributor_id:
-        total_actual = total_actual.filter(Actual.distributor_id == distributor_id)
-    
-    if period_type == 'Weekly':
-        week_date = get_period_weeks(period_type, period_identifier)[0] if get_period_weeks(period_type, period_identifier) else None
-        if week_date:
-            total_actual = total_actual.filter(Actual.week_start_date == week_date)
-        else:
-            total_actual = total_actual.filter(Actual.id == -1)  # No results if invalid
-    elif period_type == 'Monthly':
-        total_actual = total_actual.filter(Actual.month == period_identifier)
-    elif period_type == 'Quarterly':
-        total_actual = total_actual.filter(Actual.quarter == period_identifier)
-    elif period_type == 'Yearly':
-        total_actual = total_actual.filter(Actual.year == period_identifier)
-    
-    total_actual = total_actual.scalar() or 0
+    # For 'Monthly' period type (most common), extract the month and financial year
+    if period_type == 'Monthly' and '-' in period_identifier:
+        month, financial_year = period_identifier.split('-', 1)
+        
+        # Get total actual by using a more flexible query that searches all records for the month
+        total_actual = db.session.query(func.sum(Actual.actual_sales))
+        
+        if distributor_id:
+            total_actual = total_actual.filter(Actual.distributor_id == distributor_id)
+        
+        # Use both the month field and date-based filtering (just like the dashboard)
+        total_actual = total_actual.filter(
+            (Actual.month == period_identifier) | 
+            (Actual.month.like(f"{month}%") & Actual.year.like(f"%{financial_year[2:]}"))
+        )
+        
+        # Parse the financial year to get calendar dates
+        try:
+            fy_start_year = int("20" + financial_year[2:4])
+            
+            # Map months to their calendar values
+            month_map = {
+                'Apr': 4, 'May': 5, 'Jun': 6, 'Jul': 7, 'Aug': 8, 'Sep': 9, 
+                'Oct': 10, 'Nov': 11, 'Dec': 12, 'Jan': 1, 'Feb': 2, 'Mar': 3
+            }
+            
+            # Determine the year for this month
+            month_num = month_map.get(month, 1)
+            year = fy_start_year if month_num >= 4 else fy_start_year + 1
+            
+            # Create date range for the entire month
+            if month_num in [4, 6, 9, 11]:  # 30 days
+                last_day = 30
+            elif month_num == 2:  # February - simplified, not handling leap years
+                last_day = 28
+            else:  # 31 days
+                last_day = 31
+            
+            start_date = f"{year}-{month_num:02d}-01"  # First day of month
+            end_date = f"{year}-{month_num:02d}-{last_day}"  # Last day of month
+            
+            # Also try date-based filtering for weekly data within this month
+            date_filtered_actual = db.session.query(func.sum(Actual.actual_sales)).filter(
+                Actual.distributor_id == distributor_id if distributor_id else True,
+                Actual.week_start_date >= start_date,
+                Actual.week_end_date <= end_date
+            ).scalar() or 0
+            
+            # Use date-filtered value if it's greater (meaning we found more records)
+            if date_filtered_actual > 0:
+                total_actual = date_filtered_actual
+            else:
+                total_actual = total_actual.scalar() or 0
+        except Exception as e:
+            # Fallback to simple filtering if date parsing fails
+            total_actual = total_actual.scalar() or 0
+            
+    # Default filtering for other period types
+    else:
+        total_actual = db.session.query(func.sum(Actual.actual_sales))
+        
+        if distributor_id:
+            total_actual = total_actual.filter(Actual.distributor_id == distributor_id)
+        
+        if period_type == 'Weekly':
+            week_date = get_period_weeks(period_type, period_identifier)[0] if get_period_weeks(period_type, period_identifier) else None
+            if week_date:
+                total_actual = total_actual.filter(Actual.week_start_date == week_date)
+            else:
+                total_actual = total_actual.filter(Actual.id == -1)  # No results if invalid
+        elif period_type == 'Monthly':
+            total_actual = total_actual.filter(Actual.month == period_identifier)
+        elif period_type == 'Quarterly':
+            total_actual = total_actual.filter(Actual.quarter == period_identifier)
+        elif period_type == 'Yearly':
+            total_actual = total_actual.filter(Actual.year == period_identifier)
+        
+        total_actual = total_actual.scalar() or 0
     
     # Calculate achievement
     achievement_amount = total_actual
@@ -290,10 +302,10 @@ def generate_pdf_report(distributor_name, period_type, period_identifier, perfor
     # Performance data table
     data = [
         ['Metric', 'Value'],
-        ['Target', f"{performance_data['target']:,.2f} cases"],
-        ['Actual', f"{performance_data['actual']:,.2f} cases"],
-        ['Achievement', f"{performance_data['achievement_amount']:,.2f} cases ({performance_data['achievement_percent']:.2f}%)"],
-        ['Shortfall', f"{performance_data['shortfall']:,.2f} cases"]
+        ['Target', f"{int(performance_data['target']):,} cases"],
+        ['Actual', f"{int(performance_data['actual']):,} cases"],
+        ['Achievement', f"{int(performance_data['achievement_percent'])}%"],
+        ['Shortfall', f"{int(performance_data['shortfall']):,} cases"]
     ]
     
     table = Table(data, colWidths=[200, 200])
@@ -341,31 +353,68 @@ def generate_excel_report(distributor_name, period_type, period_identifier, perf
     
     # Create DataFrame
     df = pd.DataFrame({
-        'Metric': ['Target', 'Actual', 'Achievement Amount', 'Achievement Percent', 'Shortfall'],
+        'Metric': ['Target', 'Actual', 'Achievement Percent', 'Shortfall'],
         'Value': [
-            f"{performance_data['target']:,.2f} cases",
-            f"{performance_data['actual']:,.2f} cases",
-            f"{performance_data['achievement_amount']:,.2f} cases",
-            f"{performance_data['achievement_percent']:.2f}%",
-            f"{performance_data['shortfall']:,.2f} cases"
-        ]
-    })
-    
-    # Add header information
-    header_df = pd.DataFrame({
-        'Report Information': [
-            f'Distributor: {distributor_name}',
-            f'Period: {period_type} {period_identifier}',
-            f'Generated: {datetime.now().strftime("%Y-%m-%d %H:%M")}'
+            f"{int(performance_data['target']):,} cases",
+            f"{int(performance_data['actual']):,} cases",
+            f"{int(performance_data['achievement_percent'])}%",
+            f"{int(performance_data['shortfall']):,} cases"
         ]
     })
     
     # Create Excel writer
-    with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
-        header_df.to_excel(writer, sheet_name='Performance Report', index=False, startrow=0)
-        df.to_excel(writer, sheet_name='Performance Report', index=False, startrow=5)
+    with pd.ExcelWriter(buffer, engine='xlsxwriter') as writer:
+        # Write data to Excel
+        df.to_excel(writer, sheet_name='Performance', index=False)
+        
+        # Get workbook and worksheet objects
+        workbook = writer.book
+        worksheet = writer.sheets['Performance']
+        
+        # Add formatting
+        header_format = workbook.add_format({
+            'bold': True,
+            'bg_color': '#DDDDDD',
+            'border': 1
+        })
+        
+        cell_format = workbook.add_format({
+            'border': 1
+        })
+        
+        # Apply formatting
+        worksheet.set_column('A:A', 20, cell_format)
+        worksheet.set_column('B:B', 25, cell_format)
+        worksheet.set_row(0, None, header_format)
+        
+        # Add title
+        title_format = workbook.add_format({
+            'bold': True,
+            'font_size': 16
+        })
+        
+        worksheet.write('D1', f'Distributor: {distributor_name}', title_format)
+        worksheet.write('D2', f'Period: {period_type} {period_identifier}', title_format)
+        worksheet.write('D3', f'Report Generated: {datetime.now().strftime("%Y-%m-%d %H:%M")}', title_format)
+        
+        # Add chart
+        chart = workbook.add_chart({'type': 'column'})
+        
+        # Configure chart
+        chart.add_series({
+            'name': 'Performance',
+            'categories': ['Performance', 1, 0, 2, 0],  # Metrics (excluding shortfall)
+            'values': '=Performance!$B$2:$B$3',  # Values for Target and Actual
+            'data_labels': {'value': True}
+        })
+        
+        chart.set_title({'name': 'Target vs. Actual Performance'})
+        chart.set_legend({'position': 'top'})
+        
+        # Insert chart
+        worksheet.insert_chart('D5', chart, {'x_offset': 0, 'y_offset': 0, 'x_scale': 1.5, 'y_scale': 1.5})
     
-    # Get Excel from buffer
+    # Get Excel file from buffer
     buffer.seek(0)
     return buffer.getvalue()
 

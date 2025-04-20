@@ -15,6 +15,7 @@ import csv
 import json
 import sqlite3
 import subprocess
+import calendar
 
 from app import app, db, login_manager
 from models import User, Distributor, Target, Actual
@@ -91,6 +92,37 @@ def dashboard():
     # Get all months
     months = ['All', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec', 'Jan', 'Feb', 'Mar']
     
+    # Check if this is an initial page load without specific filters
+    is_initial_load = not any([
+        request.args.get('financial_year'),
+        request.args.get('month'),
+        request.args.get('date_range')
+    ])
+    
+    # If it's the initial load without filters, return a template with empty data
+    if is_initial_load and not request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+        # Initialize empty data
+        empty_overall_data = {
+            'target': 0,
+            'actual': 0,
+            'achievement_amount': 0,
+            'achievement_percent': 0,
+            'shortfall': 0
+        }
+        
+        return render_template(
+            'dashboard.html',
+            distributors=distributors,
+            financial_years=financial_years,
+            months=months,
+            selected_financial_year=selected_financial_year,
+            selected_month=selected_month,
+            selected_date_range=selected_date_range,
+            selected_distributor_id=distributor_id,
+            overall_data=empty_overall_data,
+            distributor_performance=[]
+        )
+    
     # If no date_range is provided, get the default one for the selected month
     if not selected_date_range:
         if selected_month == 'All':
@@ -123,46 +155,253 @@ def dashboard():
     
     # Get performance data for all distributors
     distributor_performance = []
+    total_target = 0
+    total_actual = 0
+    
     for distributor in distributors:
         if selected_month == 'All':
             # For 'All', get data for the entire financial year for each distributor
             try:
-                date_parts = selected_date_range.split(' - ')
-                start_str = date_parts[0].split(' ')[0] + ' ' + date_parts[0].split(' ')[1] + ' ' + selected_financial_year[:2] + date_parts[0].split(' ')[2]
-                end_str = date_parts[1].split(' ')[0] + ' ' + date_parts[1].split(' ')[1] + ' ' + selected_financial_year[:2] + date_parts[1].split(' ')[2]
+                # Parse financial year to get the correct calendar years
+                fy_start_year = int("20" + selected_financial_year[2:4])
                 
+                # Get all monthly targets for this financial year
                 targets = Target.query.filter(
                     Target.distributor_id == distributor.id,
                     Target.period_type == 'Monthly',
                     Target.period_identifier.like(f"%-{selected_financial_year}")
                 ).all()
                 
+                # Get all actuals for this financial year by filtering on the year field
                 actuals = Actual.query.filter(
                     Actual.distributor_id == distributor.id,
-                    Actual.week_start_date >= start_str,
-                    Actual.week_end_date <= end_str
+                    Actual.year == selected_financial_year
                 ).all()
                 
-                total_target = sum(t.target_value for t in targets)
-                total_actual = sum(a.actual_value for a in actuals)
+                distributor_target = sum(t.target_value for t in targets)
+                distributor_actual = sum(a.actual_sales for a in actuals)
+                
+                # If no actuals are found through the year field, try using date range
+                if distributor_actual == 0:
+                    # Create date range for the entire financial year
+                    start_date = f"{fy_start_year}-04-01"  # April 1st
+                    end_date = f"{fy_start_year+1}-03-31"  # March 31st
+                    
+                    date_range_actuals = Actual.query.filter(
+                        Actual.distributor_id == distributor.id,
+                        Actual.week_start_date >= start_date,
+                        Actual.week_end_date <= end_date
+                    ).all()
+                    
+                    distributor_actual = sum(a.actual_sales for a in date_range_actuals)
+                
+                total_target += distributor_target
+                total_actual += distributor_actual
+                
+                achievement_percent = (distributor_actual / distributor_target * 100) if distributor_target > 0 else 0
+                shortfall = max(0, distributor_target - distributor_actual)
                 
                 distributor_performance.append({
                     'id': distributor.id,
                     'name': distributor.name,
-                    'target': total_target,
-                    'actual': total_actual,
-                    'achievement_percent': (total_actual / total_target * 100) if total_target > 0 else 0
+                    'target': distributor_target,
+                    'actual': distributor_actual,
+                    'achievement_amount': distributor_actual,
+                    'achievement_percent': achievement_percent,
+                    'shortfall': shortfall
                 })
             except Exception as e:
                 app.logger.error(f"Error calculating distributor performance for 'All' month: {str(e)}")
         else:
+            # For a specific month, properly handle monthly aggregation
             period_identifier = f"{selected_month}-{selected_financial_year}"
-            perf_data = generate_performance_data(distributor.id, 'Monthly', period_identifier, db, Actual, Target)
+            
+            # Get the monthly target
+            target = Target.query.filter_by(
+                distributor_id=distributor.id,
+                period_type='Monthly',
+                period_identifier=period_identifier
+            ).first()
+            
+            # Get all weekly actuals within this month
+            actuals = Actual.query.filter_by(
+                distributor_id=distributor.id,
+                month=period_identifier
+            ).all()
+            
+            # If no actuals found using month field, try using date range
+            if not actuals:
+                # Parse the financial year
+                fy_start_year = int("20" + selected_financial_year[2:4])
+                
+                # Map months to their calendar values
+                month_map = {
+                    'Apr': 4, 'May': 5, 'Jun': 6, 'Jul': 7, 'Aug': 8, 'Sep': 9, 
+                    'Oct': 10, 'Nov': 11, 'Dec': 12, 'Jan': 1, 'Feb': 2, 'Mar': 3
+                }
+                
+                # Determine the year for this month
+                month_num = month_map[selected_month]
+                year = fy_start_year if month_num >= 4 else fy_start_year + 1
+                
+                # Create date range for the entire month
+                if month_num in [4, 6, 9, 11]:  # 30 days
+                    last_day = 30
+                elif month_num == 2:  # February - simplified, not handling leap years
+                    last_day = 28
+                else:  # 31 days
+                    last_day = 31
+                
+                start_date = f"{year}-{month_num:02d}-01"  # First day of month
+                end_date = f"{year}-{month_num:02d}-{last_day}"  # Last day of month
+                
+                actuals = Actual.query.filter(
+                    Actual.distributor_id == distributor.id,
+                    Actual.week_start_date >= start_date,
+                    Actual.week_end_date <= end_date
+                ).all()
+            
+            distributor_target = target.target_value if target else 0
+            distributor_actual = sum(a.actual_sales for a in actuals)
+            
+            # If the date range is specific (not for the entire month), filter actuals further
+            if selected_date_range and not (selected_date_range.startswith('01 ') and 
+                                           (selected_date_range.endswith(' 28') or 
+                                           selected_date_range.endswith(' 29') or
+                                           selected_date_range.endswith(' 30') or 
+                                           selected_date_range.endswith(' 31'))):
+                try:
+                    # Parse date range which might be in different formats
+                    date_parts = []
+                    if ' - ' in selected_date_range:
+                        date_parts = selected_date_range.split(' - ')
+                    elif ' to ' in selected_date_range:
+                        date_parts = selected_date_range.split(' to ')
+                    else:
+                        # If no delimiter found, just continue with monthly data
+                        app.logger.warning(f"Could not parse date range: {selected_date_range}")
+                        date_parts = []
+                    
+                    if len(date_parts) == 2:
+                        # Parse start date parts safely
+                        start_parts = date_parts[0].strip().split(' ')
+                        
+                        # Handle case when there aren't enough parts
+                        if len(start_parts) < 2:
+                            app.logger.warning(f"Invalid start date format: {date_parts[0]}")
+                            return jsonify({"status": "error", "message": "Invalid date format"})
+                            
+                        start_day = int(start_parts[0])
+                        start_month = start_parts[1] 
+                        
+                        # Parse end date parts safely
+                        end_parts = date_parts[1].strip().split(' ')
+                        
+                        # Handle case when there aren't enough parts
+                        if len(end_parts) < 2:
+                            app.logger.warning(f"Invalid end date format: {date_parts[1]}")
+                            return jsonify({"status": "error", "message": "Invalid date format"})
+                            
+                        end_day = int(end_parts[0])
+                        end_month = end_parts[1]
+                        
+                        # Month to number mapping
+                        month_to_num = {
+                            'Jan': 1, 'Feb': 2, 'Mar': 3, 'Apr': 4, 'May': 5, 'Jun': 6,
+                            'Jul': 7, 'Aug': 8, 'Sep': 9, 'Oct': 10, 'Nov': 11, 'Dec': 12
+                        }
+                        
+                        # Safely get month numbers with fallbacks
+                        start_month_num = month_to_num.get(start_month, month_map.get(selected_month, 1))
+                        end_month_num = month_to_num.get(end_month, month_map.get(selected_month, 1))
+                        
+                        # Determine correct year
+                        start_year = fy_start_year if start_month_num >= 4 else fy_start_year + 1
+                        end_year = fy_start_year if end_month_num >= 4 else fy_start_year + 1
+                        
+                        # Override with explicit year if provided in the date string
+                        if len(start_parts) > 2:
+                            try:
+                                start_year = int(start_parts[2])
+                            except (ValueError, IndexError):
+                                pass
+                                
+                        if len(end_parts) > 2:
+                            try:
+                                end_year = int(end_parts[2])
+                            except (ValueError, IndexError):
+                                pass
+                        
+                        start_date = f"{start_year}-{start_month_num:02d}-{start_day:02d}"
+                        end_date = f"{end_year}-{end_month_num:02d}-{end_day:02d}"
+                        
+                        # Get actuals for the specific date range
+                        date_range_actuals = Actual.query.filter(
+                            Actual.distributor_id == distributor.id,
+                            Actual.week_start_date >= start_date,
+                            Actual.week_end_date <= end_date
+                        ).all()
+                        
+                        # If no exact matches, try overlapping dates
+                        if not date_range_actuals:
+                            date_range_actuals = Actual.query.filter(
+                                Actual.distributor_id == distributor.id,
+                                Actual.week_start_date <= end_date,
+                                Actual.week_end_date >= start_date
+                            ).all()
+                        
+                        # Adjust target for partial month (simple proration)
+                        if distributor_target > 0:
+                            # Determine days in the selected range
+                            try:
+                                start_datetime = datetime.strptime(start_date, '%Y-%m-%d')
+                                end_datetime = datetime.strptime(end_date, '%Y-%m-%d')
+                                days_in_range = (end_datetime - start_datetime).days + 1
+                                
+                                # Get days in month
+                                year = start_datetime.year
+                                month = start_datetime.month
+                                _, days_in_month = calendar.monthrange(year, month)
+                                
+                                # Prorate the target
+                                distributor_target = distributor_target * (days_in_range / days_in_month)
+                            except Exception as e:
+                                app.logger.error(f"Error calculating proration: {str(e)}")
+                        
+                        # Use the specific date range actuals
+                        distributor_actual = sum(a.actual_sales for a in date_range_actuals)
+                except Exception as e:
+                    app.logger.error(f"Error calculating date range performance: {str(e)}")
+                    # Continue with the monthly data on error
+            
+            total_target += distributor_target
+            total_actual += distributor_actual
+            
+            achievement_percent = (distributor_actual / distributor_target * 100) if distributor_target > 0 else 0
+            shortfall = max(0, distributor_target - distributor_actual)
+            
             distributor_performance.append({
                 'id': distributor.id,
                 'name': distributor.name,
-                **perf_data
+                'target': distributor_target,
+                'actual': distributor_actual,
+                'achievement_amount': distributor_actual,
+                'achievement_percent': achievement_percent,
+                'shortfall': shortfall
             })
+    
+    # Calculate overall achievement metrics
+    overall_achievement_percent = (total_actual / total_target * 100) if total_target > 0 else 0
+    overall_shortfall = max(0, total_target - total_actual)
+    
+    # Create overall data dictionary
+    overall_data = {
+        'target': total_target,
+        'actual': total_actual,
+        'achievement_amount': total_actual,
+        'achievement_percent': overall_achievement_percent,
+        'shortfall': overall_shortfall
+    }
     
     # Sort by achievement percent (descending)
     distributor_performance.sort(key=lambda x: x.get('achievement_percent', 0), reverse=True)
@@ -178,8 +417,13 @@ def dashboard():
     # Check if the request wants JSON data
     if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
         return jsonify({
-            'overall_data': distributor_performance,
-            'selected_distributor_performance': selected_distributor_performance
+            'overall_data': overall_data,
+            'distributor_performance': distributor_performance,
+            'period_info': {
+                'financial_year': selected_financial_year,
+                'month': selected_month,
+                'date_range': selected_date_range
+            }
         })
     
     return render_template(
@@ -191,8 +435,8 @@ def dashboard():
         selected_month=selected_month,
         selected_date_range=selected_date_range,
         selected_distributor_id=distributor_id,
-        overall_data=distributor_performance,
-        selected_distributor_performance=selected_distributor_performance
+        overall_data=overall_data,
+        distributor_performance=distributor_performance
     )
 
 # Distributor Routes
@@ -743,6 +987,7 @@ def generate_report(report_type):
     distributor_id = request.form.get('distributor_id')
     financial_year = request.form.get('financial_year')
     month = request.form.get('month')
+    date_range = request.form.get('date_range', '')
     
     if not all([distributor_id, financial_year, month]):
         flash('All fields are required', 'danger')
@@ -754,8 +999,13 @@ def generate_report(report_type):
     # Create period identifier for database query (e.g., "Apr-FY24-25")
     period_identifier = f"{month}-{financial_year}"
     
-    # Get performance data
+    # Get performance data - passing date_range to ensure consistency with dashboard
     performance_data = generate_performance_data(distributor.id, 'Monthly', period_identifier, db, Actual, Target)
+    
+    # Add date range to report info if provided
+    report_title = f"{distributor.name} - {month} {financial_year}"
+    if date_range:
+        report_title += f" ({date_range})"
     
     # Generate report
     if report_type == 'pdf':
@@ -788,6 +1038,7 @@ def send_email_report_route():
     financial_year = request.form.get('financial_year')
     month = request.form.get('month')
     email = request.form.get('email')
+    date_range = request.form.get('date_range', '')
     
     if not all([distributor_id, financial_year, month, email]):
         flash('All fields are required', 'danger')
@@ -813,13 +1064,14 @@ def send_email_report_route():
     except Exception as e:
         flash(f'Error sending email: {str(e)}', 'danger')
     
-    return redirect(url_for('reports'))
+    return redirect(url_for('reports', financial_year=financial_year, month=month, date_range=date_range, distributor_id=distributor_id))
 
 @app.route('/bulk_export_reports', methods=['POST'])
 @login_required
 def bulk_export_reports():
     financial_year = request.form.get('financial_year')
     month = request.form.get('month')
+    date_range = request.form.get('date_range', '')
     
     if not all([financial_year, month]):
         flash('Financial year and month are required', 'danger')
@@ -974,6 +1226,7 @@ def send_to_distributor():
     distributor_id = request.form.get('distributor_id')
     financial_year = request.form.get('financial_year')
     month = request.form.get('month')
+    date_range = request.form.get('date_range', '')
     
     if not all([distributor_id, financial_year, month]):
         flash('All fields are required', 'danger')
@@ -985,7 +1238,7 @@ def send_to_distributor():
     # Verify distributor has an email
     if not distributor.email:
         flash('Selected distributor does not have an email address', 'danger')
-        return redirect(url_for('reports'))
+        return redirect(url_for('reports', financial_year=financial_year, month=month, date_range=date_range, distributor_id=distributor_id))
     
     # Create period identifier for database query (e.g., "Apr-FY24-25")
     period_identifier = f"{month}-{financial_year}"
@@ -1004,7 +1257,7 @@ def send_to_distributor():
     except Exception as e:
         flash(f'Error sending email: {str(e)}', 'danger')
     
-    return redirect(url_for('reports'))
+    return redirect(url_for('reports', financial_year=financial_year, month=month, date_range=date_range, distributor_id=distributor_id))
 
 @app.route('/api/months/<financial_year>')
 @login_required
@@ -1059,6 +1312,9 @@ def get_date_range(financial_year, month):
     # Last day of the month
     last_day = next_month - timedelta(days=1)
     
+    # Create a default date range for the entire month
+    month_range = f"01 {month} {year} - {last_day.day:02d} {month} {year}"
+    
     # Determine the first week's start date (first Monday of month or last Monday of previous month)
     first_week_start = first_day - timedelta(days=first_day.weekday())
     
@@ -1074,15 +1330,23 @@ def get_date_range(financial_year, month):
         })
         current_week_start += timedelta(days=7)
     
+    # Add the full month as the first option
+    full_month = {
+        'start': first_day.strftime('%Y-%m-%d'),
+        'end': last_day.strftime('%Y-%m-%d'),
+        'display': month_range
+    }
+    weeks.insert(0, full_month)
+    
     # Check if request wants all weeks or just the first one
     if request.args.get('all_weeks'):
         return jsonify({
             'weeks': weeks,
-            'default': weeks[0]['display'] if weeks else "No dates available"
+            'default': month_range if weeks else "No dates available"
         })
     
-    # By default, return the first week's date range
-    return jsonify(weeks[0]['display'] if weeks else "No dates available")
+    # By default, return the first week's date range (which is now the full month)
+    return jsonify(month_range if weeks else "No dates available")
 
 @app.route('/batch_targets', methods=['GET'])
 @login_required
@@ -1137,6 +1401,45 @@ def save_batch_targets():
             if existing:
                 # Update existing target
                 existing.target_value = float(target_value)
+                
+                # If we have date range info and it's not 'All' month, update the week dates
+                if month != 'All' and date_range:
+                    try:
+                        # Parse date range to get actual dates
+                        date_parts = date_range.split(' - ')
+                        if len(date_parts) == 2:
+                            # Parse the financial year
+                            fy_start_year = int("20" + financial_year[2:4])
+                            
+                            # Map month names to numbers
+                            month_map = {
+                                'Jan': 1, 'Feb': 2, 'Mar': 3, 'Apr': 4, 'May': 5, 'Jun': 6,
+                                'Jul': 7, 'Aug': 8, 'Sep': 9, 'Oct': 10, 'Nov': 11, 'Dec': 12
+                            }
+                            
+                            # Determine the default year for this month
+                            month_num = month_map.get(month, 1)
+                            default_year = fy_start_year if month_num >= 4 else fy_start_year + 1
+                            
+                            # Parse start date
+                            start_parts = date_parts[0].strip().split(' ')
+                            start_day = int(start_parts[0])
+                            start_month = start_parts[1]
+                            start_year = int(start_parts[2]) if len(start_parts) > 2 else default_year
+                            
+                            # Parse end date
+                            end_parts = date_parts[1].strip().split(' ')
+                            end_day = int(end_parts[0])
+                            end_month = end_parts[1]
+                            end_year = int(end_parts[2]) if len(end_parts) > 2 else default_year
+                            
+                            # Create date objects
+                            existing.week_start_date = datetime(start_year, month_map[start_month], start_day).strftime('%Y-%m-%d')
+                            existing.week_end_date = datetime(end_year, month_map[end_month], end_day).strftime('%Y-%m-%d')
+                    except Exception as e:
+                        # Log error but continue with the update
+                        app.logger.error(f"Error updating date range: {str(e)}")
+                
                 updated_count += 1
             else:
                 # Create new target
@@ -1146,6 +1449,45 @@ def save_batch_targets():
                     period_identifier=period_identifier,
                     target_value=float(target_value)
                 )
+                
+                # If we have date range info and it's not 'All' month, set the week dates
+                if month != 'All' and date_range:
+                    try:
+                        # Parse date range to get actual dates
+                        date_parts = date_range.split(' - ')
+                        if len(date_parts) == 2:
+                            # Parse the financial year
+                            fy_start_year = int("20" + financial_year[2:4])
+                            
+                            # Map month names to numbers
+                            month_map = {
+                                'Jan': 1, 'Feb': 2, 'Mar': 3, 'Apr': 4, 'May': 5, 'Jun': 6,
+                                'Jul': 7, 'Aug': 8, 'Sep': 9, 'Oct': 10, 'Nov': 11, 'Dec': 12
+                            }
+                            
+                            # Determine the default year for this month
+                            month_num = month_map.get(month, 1)
+                            default_year = fy_start_year if month_num >= 4 else fy_start_year + 1
+                            
+                            # Parse start date
+                            start_parts = date_parts[0].strip().split(' ')
+                            start_day = int(start_parts[0])
+                            start_month = start_parts[1]
+                            start_year = int(start_parts[2]) if len(start_parts) > 2 else default_year
+                            
+                            # Parse end date
+                            end_parts = date_parts[1].strip().split(' ')
+                            end_day = int(end_parts[0])
+                            end_month = end_parts[1]
+                            end_year = int(end_parts[2]) if len(end_parts) > 2 else default_year
+                            
+                            # Create date objects
+                            new_target.week_start_date = datetime(start_year, month_map[start_month], start_day).strftime('%Y-%m-%d')
+                            new_target.week_end_date = datetime(end_year, month_map[end_month], end_day).strftime('%Y-%m-%d')
+                    except Exception as e:
+                        # Log error but continue with the creation
+                        app.logger.error(f"Error setting date range: {str(e)}")
+                
                 db.session.add(new_target)
                 new_count += 1
         
@@ -1187,50 +1529,39 @@ def save_batch_sales():
             flash('Invalid date range format', 'danger')
             return redirect(url_for('actuals'))
         
-        # Parse date parts format: "DD MMM"
+        # Parse date parts format: "DD MMM" or "DD MMM YYYY"
         try:
-            # Try to parse using datetime.strptime first
-            start_date_str = date_parts[0].strip()
-            end_date_str = date_parts[1].strip()
+            # Parse the financial year
+            fy_start_year = int("20" + financial_year[2:4])
             
-            # Add a default year to parse the date (will be replaced later)
-            start_date = datetime.strptime(f"{start_date_str} 2000", "%d %b %Y")
-            end_date = datetime.strptime(f"{end_date_str} 2000", "%d %b %Y")
+            # Map month names to numbers
+            month_map = {
+                'Jan': 1, 'Feb': 2, 'Mar': 3, 'Apr': 4, 'May': 5, 'Jun': 6,
+                'Jul': 7, 'Aug': 8, 'Sep': 9, 'Oct': 10, 'Nov': 11, 'Dec': 12
+            }
             
-            # Extract day and month
-            start_day = start_date.day
-            start_month = start_date.strftime('%b')  # 'Jan', 'Feb', etc.
+            # Determine the default year for this month
+            month_num = month_map.get(month, 1) if month != 'All' else 4  # Default to April for 'All'
+            default_year = fy_start_year if month_num >= 4 else fy_start_year + 1
             
-            end_day = end_date.day
-            end_month = end_date.strftime('%b')
-        except ValueError:
-            # If that fails, try manual parsing
-            start_day, start_month = date_parts[0].strip().split(' ')
-            end_day, end_month = date_parts[1].strip().split(' ')
+            # Parse start date
+            start_parts = date_parts[0].strip().split(' ')
+            start_day = int(start_parts[0])
+            start_month = start_parts[1]
+            start_year = int(start_parts[2]) if len(start_parts) > 2 else default_year
             
-            # Convert to integers where needed
-            start_day = int(start_day)
-            end_day = int(end_day)
-        
-        # Map month abbreviations to numbers
-        month_map = {
-            'Jan': 1, 'Feb': 2, 'Mar': 3, 'Apr': 4, 'May': 5, 'Jun': 6,
-            'Jul': 7, 'Aug': 8, 'Sep': 9, 'Oct': 10, 'Nov': 11, 'Dec': 12
-        }
-        
-        # Parse the financial year to get the calendar year
-        fy_start_year = int("20" + financial_year[2:4])
-        
-        # Determine the year for start and end dates
-        start_month_num = month_map[start_month]
-        end_month_num = month_map[end_month]
-        
-        start_year = fy_start_year if start_month_num >= 4 else fy_start_year + 1
-        end_year = fy_start_year if end_month_num >= 4 else fy_start_year + 1
-        
-        # Create date objects
-        week_start_date = datetime(start_year, start_month_num, int(start_day)).strftime('%Y-%m-%d')
-        week_end_date = datetime(end_year, end_month_num, int(end_day)).strftime('%Y-%m-%d')
+            # Parse end date
+            end_parts = date_parts[1].strip().split(' ')
+            end_day = int(end_parts[0])
+            end_month = end_parts[1]
+            end_year = int(end_parts[2]) if len(end_parts) > 2 else default_year
+            
+            # Create date objects
+            week_start_date = datetime(start_year, month_map[start_month], start_day).strftime('%Y-%m-%d')
+            week_end_date = datetime(end_year, month_map[end_month], end_day).strftime('%Y-%m-%d')
+        except (ValueError, KeyError) as e:
+            flash(f'Error parsing date range: {str(e)}', 'danger')
+            return redirect(url_for('actuals'))
         
         # Process each selected distributor
         updated_count = 0

@@ -156,26 +156,71 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Initialize Flatpickr for week selection
     const targetDatepicker = flatpickr("#target_date_range", {
-        dateFormat: "d M",
+        dateFormat: "d M Y",
+        mode: "range", // Enable range selection
         onChange: function(selectedDates, dateStr, instance) {
-            if (selectedDates.length === 0) return;
+            if (selectedDates.length < 2) return; // Wait until both dates are selected
             
-            const selectedDate = selectedDates[0];
-            const start = new Date(selectedDate);
-            const end = new Date(selectedDate);
+            const startDate = selectedDates[0];
+            const endDate = selectedDates[1];
 
-            const day = selectedDate.getDay();
-            const diffToMonday = day === 0 ? -6 : 1 - day; // Sunday fix
-            start.setDate(start.getDate() + diffToMonday);
-            end.setDate(start.getDate() + 6);
-
-            const format = d => `${d.getDate().toString().padStart(2, '0')} ${['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][d.getMonth()]}`;
-            instance.input.value = `${format(start)} - ${format(end)}`;
+            const formatDate = d => `${d.getDate().toString().padStart(2, '0')} ${['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][d.getMonth()]}`;
+            instance.input.value = `${formatDate(startDate)} - ${formatDate(endDate)}`;
             
             // Mark as user selected
             instance.input._userSelected = true;
         }
     });
+    
+    // If there's a saved date range, parse it and set as the default
+    const savedDateRange = document.getElementById('target_date_range').value;
+    if (savedDateRange) {
+        try {
+            // Try to parse the date range
+            const dateParts = savedDateRange.split(' - ');
+            if (dateParts.length === 2) {
+                // Get the financial year and month info
+                const financialYear = document.getElementById('target_financial_year').value;
+                const month = document.getElementById('target_month').value;
+                
+                if (financialYear && month) {
+                    // Parse the financial year
+                    const fy_start_year = parseInt("20" + financialYear.substring(2, 4));
+                    
+                    // Map month names to numbers
+                    const monthMap = {
+                        'Jan': 1, 'Feb': 2, 'Mar': 3, 'Apr': 4, 'May': 5, 'Jun': 6,
+                        'Jul': 7, 'Aug': 8, 'Sep': 9, 'Oct': 10, 'Nov': 11, 'Dec': 12
+                    };
+                    
+                    // Determine the year for this month
+                    const monthNum = monthMap[month];
+                    const year = monthNum >= 4 ? fy_start_year : fy_start_year + 1;
+                    
+                    // Parse the date parts
+                    const parseDate = (dateStr, defaultYear) => {
+                        const parts = dateStr.split(' ');
+                        if (parts.length >= 2) {
+                            const day = parseInt(parts[0], 10);
+                            const monthStr = parts[1];
+                            const monthNumber = monthMap[monthStr] - 1; // JavaScript months are 0-indexed
+                            return new Date(defaultYear, monthNumber, day);
+                        }
+                        return null;
+                    };
+                    
+                    const startDate = parseDate(dateParts[0], year);
+                    const endDate = parseDate(dateParts[1], year);
+                    
+                    if (startDate && endDate) {
+                        targetDatepicker.setDate([startDate, endDate]);
+                    }
+                }
+            }
+        } catch (e) {
+            console.error('Error parsing saved date range:', e);
+        }
+    }
     
     // Add button click handler
     document.getElementById('target_date_picker_btn').addEventListener('click', function() {

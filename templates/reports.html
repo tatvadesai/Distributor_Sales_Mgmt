@@ -4,9 +4,8 @@
 <div class="row mb-4">
     <div class="col-md-12">
         <div class="card shadow">
-            <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
-                <h5 class="mb-0"><i class="fas fa-file-alt me-2"></i>Reports</h5>
-                <small class="text-white">Generate and send performance reports</small>
+            <div class="card-header bg-primary text-white">
+                <h5 class="mb-0"><i class="fas fa-chart-line me-2"></i>Performance Reports</h5>
             </div>
             <div class="card-body">
                 <!-- Include the filter component -->
@@ -14,10 +13,16 @@
                     {% include 'filter_component.html' %}
                 {% endwith %}
                 
-                <div class="d-flex justify-content-end mb-4">
-                    <button type="button" id="sendToDistributorBtn" class="btn btn-success" onclick="sendToDistributor()">
-                        <i class="fas fa-paper-plane me-1"></i> Send to Distributor
-                    </button>
+                <!-- Period information -->
+                <div class="alert alert-info mb-4">
+                    <h6 class="mb-1"><i class="fas fa-calendar-alt me-2"></i>Report for: 
+                    {% if selected_month == 'All' %}
+                        Entire Financial Year {{ selected_financial_year }}
+                    {% else %}
+                        {{ selected_month }} {{ selected_financial_year }} {% if selected_date_range %} ({{ selected_date_range }}){% endif %}
+                    {% endif %}
+                    </h6>
+                    <small>Choose export format below to generate reports for the selected period.</small>
                 </div>
                 
                 <div class="card mb-4">
@@ -34,9 +39,10 @@
                                         <p class="text-muted">Generate a printable PDF report with performance metrics.</p>
                                         <form action="{{ url_for('generate_report', report_type='pdf') }}" method="post" onsubmit="return validateForm(this)">
                                             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                            <input type="hidden" name="distributor_id" id="pdf_distributor_id">
-                                            <input type="hidden" name="financial_year" id="pdf_financial_year">
-                                            <input type="hidden" name="month" id="pdf_month">
+                                            <input type="hidden" name="distributor_id" id="pdf_distributor_id" value="{{ selected_distributor_id if selected_distributor_id else '' }}">
+                                            <input type="hidden" name="financial_year" id="pdf_financial_year" value="{{ selected_financial_year }}">
+                                            <input type="hidden" name="month" id="pdf_month" value="{{ selected_month }}">
+                                            <input type="hidden" name="date_range" id="pdf_date_range" value="{{ selected_date_range }}">
                                             <button type="submit" class="btn btn-outline-danger">
                                                 <i class="fas fa-file-pdf me-1"></i>Download PDF
                                             </button>
@@ -50,12 +56,13 @@
                                     <div class="card-body text-center">
                                         <i class="fas fa-file-excel fa-4x text-success mb-3"></i>
                                         <h5>Excel Report</h5>
-                                        <p class="text-muted">Generate a detailed Excel report for further analysis.</p>
+                                        <p class="text-muted">Generate an Excel spreadsheet with performance data and charts.</p>
                                         <form action="{{ url_for('generate_report', report_type='excel') }}" method="post" onsubmit="return validateForm(this)">
                                             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                            <input type="hidden" name="distributor_id" id="excel_distributor_id">
-                                            <input type="hidden" name="financial_year" id="excel_financial_year">
-                                            <input type="hidden" name="month" id="excel_month">
+                                            <input type="hidden" name="distributor_id" id="excel_distributor_id" value="{{ selected_distributor_id if selected_distributor_id else '' }}">
+                                            <input type="hidden" name="financial_year" id="excel_financial_year" value="{{ selected_financial_year }}">
+                                            <input type="hidden" name="month" id="excel_month" value="{{ selected_month }}">
+                                            <input type="hidden" name="date_range" id="excel_date_range" value="{{ selected_date_range }}">
                                             <button type="submit" class="btn btn-outline-success">
                                                 <i class="fas fa-file-excel me-1"></i>Download Excel
                                             </button>
@@ -69,26 +76,26 @@
                 
                 <div class="card">
                     <div class="card-header bg-light">
-                        <h6 class="mb-0"><i class="fas fa-paper-plane me-2"></i>Send Reports</h6>
+                        <h6 class="mb-0"><i class="fas fa-envelope me-2"></i>Email Reports</h6>
                     </div>
                     <div class="card-body">
                         <div class="row">
                             <div class="col-md-6">
                                 <div class="card h-100">
                                     <div class="card-body text-center">
-                                        <i class="fas fa-envelope fa-4x text-primary mb-3"></i>
+                                        <i class="fas fa-paper-plane fa-4x text-primary mb-3"></i>
                                         <h5>Email Report</h5>
-                                        <p class="text-muted">Send PDF and Excel reports directly to an email address.</p>
+                                        <p class="text-muted">Send report via email to any address.</p>
                                         <form action="{{ url_for('send_email_report_route') }}" method="post" onsubmit="return validateEmailForm(this)">
                                             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                            <input type="hidden" name="distributor_id" id="email_distributor_id">
-                                            <input type="hidden" name="financial_year" id="email_financial_year">
-                                            <input type="hidden" name="month" id="email_month">
+                                            <input type="hidden" name="distributor_id" id="email_distributor_id" value="{{ selected_distributor_id if selected_distributor_id else '' }}">
+                                            <input type="hidden" name="financial_year" id="email_financial_year" value="{{ selected_financial_year }}">
+                                            <input type="hidden" name="month" id="email_month" value="{{ selected_month }}">
                                             <div class="mb-3">
-                                                <input type="email" class="form-control" name="email" placeholder="Enter email address" required>
+                                                <input type="email" class="form-control" name="email" placeholder="Email address" required>
                                             </div>
                                             <button type="submit" class="btn btn-outline-primary">
-                                                <i class="fas fa-envelope me-1"></i>Send Email
+                                                <i class="fas fa-paper-plane me-1"></i>Send Report
                                             </button>
                                         </form>
                                     </div>
@@ -98,15 +105,16 @@
                             <div class="col-md-6">
                                 <div class="card h-100">
                                     <div class="card-body text-center">
-                                        <i class="fas fa-file-export fa-4x text-info mb-3"></i>
-                                        <h5>Bulk Export</h5>
-                                        <p class="text-muted">Generate reports for all distributors at once.</p>
-                                        <form action="{{ url_for('bulk_export_reports') }}" method="post">
+                                        <i class="fas fa-truck fa-4x text-secondary mb-3"></i>
+                                        <h5>Send to Distributor</h5>
+                                        <p class="text-muted">Send report directly to the selected distributor.</p>
+                                        <form action="{{ url_for('send_to_distributor') }}" method="post" onsubmit="return validateDistributorForm(this)">
                                             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                            <input type="hidden" name="financial_year" id="bulk_financial_year">
-                                            <input type="hidden" name="month" id="bulk_month">
-                                            <button type="submit" class="btn btn-outline-info" onclick="return validateBulkExport()">
-                                                <i class="fas fa-file-export me-1"></i>Bulk Export
+                                            <input type="hidden" name="distributor_id" id="dist_distributor_id" value="{{ selected_distributor_id if selected_distributor_id else '' }}">
+                                            <input type="hidden" name="financial_year" id="dist_financial_year" value="{{ selected_financial_year }}">
+                                            <input type="hidden" name="month" id="dist_month" value="{{ selected_month }}">
+                                            <button type="submit" class="btn btn-outline-secondary">
+                                                <i class="fas fa-truck me-1"></i>Send to Distributor
                                             </button>
                                         </form>
                                     </div>
@@ -119,32 +127,23 @@
         </div>
     </div>
 </div>
-
-<!-- Hidden form for sending to distributor -->
-<form id="sendToDistributorForm" action="{{ url_for('send_to_distributor') }}" method="post" style="display: none;">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-    <input type="hidden" name="distributor_id" id="send_distributor_id">
-    <input type="hidden" name="financial_year" id="send_financial_year">
-    <input type="hidden" name="month" id="send_month">
-</form>
 {% endblock %}
 
 {% block scripts %}
 <script>
+// Utility validation functions
 function validateForm(form) {
-    // Get values from the main form
-    const distributorId = document.getElementById('distributor_id').value;
-    const financialYear = document.getElementById('financial_year').value;
-    const month = document.getElementById('month').value;
+    var distributorId = form.querySelector('[name="distributor_id"]').value;
+    var month = form.querySelector('[name="month"]').value;
+    var financialYear = form.querySelector('[name="financial_year"]').value;
     
-    // Set values in the hidden form
-    form.querySelector('[name="distributor_id"]').value = distributorId;
-    form.querySelector('[name="financial_year"]').value = financialYear;
-    form.querySelector('[name="month"]').value = month;
-    
-    // Validate required fields
     if (!distributorId) {
-        alert('Please select a distributor');
+        alert("Please select a distributor.");
+        return false;
+    }
+    
+    if (!month || !financialYear) {
+        alert("Please select both month and financial year.");
         return false;
     }
     
@@ -152,76 +151,97 @@ function validateForm(form) {
 }
 
 function validateEmailForm(form) {
-    // Validate the form first
-    if (!validateForm(form)) {
-        return false;
-    }
-    
-    // Check email
-    const email = form.querySelector('[name="email"]').value;
-    if (!email) {
-        alert('Please enter an email address');
-        return false;
-    }
-    
-    return true;
-}
-
-function validateBulkExport() {
-    const financialYear = document.getElementById('financial_year').value;
-    const month = document.getElementById('month').value;
-    
-    // Set values in the hidden form
-    document.getElementById('bulk_financial_year').value = financialYear;
-    document.getElementById('bulk_month').value = month;
-    
-    return true;
-}
-
-function sendToDistributor() {
-    const distributorId = document.getElementById('distributor_id').value;
-    const financialYear = document.getElementById('financial_year').value;
-    const month = document.getElementById('month').value;
+    var distributorId = form.querySelector('[name="distributor_id"]').value;
+    var month = form.querySelector('[name="month"]').value;
+    var financialYear = form.querySelector('[name="financial_year"]').value;
+    var email = form.querySelector('[name="email"]').value;
     
     if (!distributorId) {
-        alert('Please select a distributor');
-        return;
+        alert("Please select a distributor.");
+        return false;
     }
     
-    // Set values in the hidden form
-    document.getElementById('send_distributor_id').value = distributorId;
-    document.getElementById('send_financial_year').value = financialYear;
-    document.getElementById('send_month').value = month;
+    if (!month || !financialYear) {
+        alert("Please select both month and financial year.");
+        return false;
+    }
     
-    // Submit the form
-    document.getElementById('sendToDistributorForm').submit();
+    if (!email) {
+        alert("Please enter an email address.");
+        return false;
+    }
+    
+    return true;
 }
 
-// When page loads, set initial values
+function validateDistributorForm(form) {
+    var distributorId = form.querySelector('[name="distributor_id"]').value;
+    var month = form.querySelector('[name="month"]').value;
+    var financialYear = form.querySelector('[name="financial_year"]').value;
+    
+    if (!distributorId) {
+        alert("Please select a distributor.");
+        return false;
+    }
+    
+    if (!month || !financialYear) {
+        alert("Please select both month and financial year.");
+        return false;
+    }
+    
+    return true;
+}
+
+// When the form fields change, update all the hidden form fields
 document.addEventListener('DOMContentLoaded', function() {
-    // Sync hidden form fields with selected values
-    const distributorId = document.getElementById('distributor_id').value;
-    const financialYear = document.getElementById('financial_year').value;
-    const month = document.getElementById('month').value;
+    // Get filter form
+    var filterForm = document.getElementById('filterForm');
     
-    // Set hidden fields for PDF form
-    document.getElementById('pdf_distributor_id').value = distributorId;
-    document.getElementById('pdf_financial_year').value = financialYear;
-    document.getElementById('pdf_month').value = month;
-    
-    // Set hidden fields for Excel form
-    document.getElementById('excel_distributor_id').value = distributorId;
-    document.getElementById('excel_financial_year').value = financialYear;
-    document.getElementById('excel_month').value = month;
-    
-    // Set hidden fields for Email form
-    document.getElementById('email_distributor_id').value = distributorId;
-    document.getElementById('email_financial_year').value = financialYear;
-    document.getElementById('email_month').value = month;
-    
-    // Set hidden fields for Bulk Export form
-    document.getElementById('bulk_financial_year').value = financialYear;
-    document.getElementById('bulk_month').value = month;
+    if (filterForm) {
+        var financialYearSelect = filterForm.querySelector('[name="financial_year"]');
+        var monthSelect = filterForm.querySelector('[name="month"]');
+        var dateRangeInput = filterForm.querySelector('[name="date_range"]');
+        var distributorSelect = filterForm.querySelector('[name="distributor_id"]');
+        
+        // Update hidden fields when filter form changes
+        function updateHiddenFields() {
+            var financialYear = financialYearSelect.value;
+            var month = monthSelect.value;
+            var dateRange = dateRangeInput.value;
+            var distributorId = distributorSelect.value;
+            
+            // Update PDF form
+            document.getElementById('pdf_financial_year').value = financialYear;
+            document.getElementById('pdf_month').value = month;
+            document.getElementById('pdf_date_range').value = dateRange;
+            document.getElementById('pdf_distributor_id').value = distributorId;
+            
+            // Update Excel form
+            document.getElementById('excel_financial_year').value = financialYear;
+            document.getElementById('excel_month').value = month;
+            document.getElementById('excel_date_range').value = dateRange;
+            document.getElementById('excel_distributor_id').value = distributorId;
+            
+            // Update Email form
+            document.getElementById('email_financial_year').value = financialYear;
+            document.getElementById('email_month').value = month;
+            document.getElementById('email_distributor_id').value = distributorId;
+            
+            // Update Distributor form
+            document.getElementById('dist_financial_year').value = financialYear;
+            document.getElementById('dist_month').value = month;
+            document.getElementById('dist_distributor_id').value = distributorId;
+        }
+        
+        // Add change event listeners to form elements
+        financialYearSelect.addEventListener('change', updateHiddenFields);
+        monthSelect.addEventListener('change', updateHiddenFields);
+        dateRangeInput.addEventListener('change', updateHiddenFields);
+        distributorSelect.addEventListener('change', updateHiddenFields);
+        
+        // Initialize hidden fields with current values
+        updateHiddenFields();
+    }
 });
 </script>
 {% endblock %}

@@ -1,7 +1,7 @@
 import os
 import logging
 from datetime import datetime
-from flask import Flask, session, request, render_template
+from flask import Flask, session, request, render_template, redirect, url_for
 
 # Handle the flask_login import with complete fallback mechanism
 try:
@@ -219,11 +219,11 @@ def format_date(value, format='%Y-%m-%d'):
 @app.template_filter('format_currency')
 def format_currency(value):
     if value is not None:
-        return f"{value:,.2f} cases" if value else "0.00 cases"
-    return "0.00 cases"
+        return f"{int(value):,} cases" if value else "0 cases"
+    return "0 cases"
 
 @app.template_filter('format_percent')
 def format_percent(value):
     if value is not None:
-        return f"{value:.2f}%" if value else "0.00%"
-    return "0.00%"
+        return f"{int(value)}%" if value else "0%"
+    return "0%"

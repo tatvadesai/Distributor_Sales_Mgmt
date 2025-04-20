@@ -15,4 +15,15 @@ if __name__ == "__main__":
     else:
         app.logger.warning("Supabase not configured. Automated backups are disabled.")
     
+    print("\n╭─────────────────────────────────────────────────────────────────╮")
+    print("│                                                                 │")
+    print("│  Distributor Sales Management System                            │")
+    print("│  Open your browser and navigate to: http://127.0.0.1:5001       │")
+    print("│                                                                 │")
+    print("│  Default login credentials:                                     │")
+    print("│    Username: admin                                              │")
+    print("│    Password: admin123                                           │")
+    print("│                                                                 │")
+    print("╰─────────────────────────────────────────────────────────────────╯\n")
+    
     app.run(host="0.0.0.0", port=5001, debug=True)

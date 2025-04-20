@@ -78,6 +78,7 @@ document.addEventListener('DOMContentLoaded', function() {
 function initializeDatepicker() {
     const monthSelect = document.getElementById('month');
     const financialYearSelect = document.getElementById('financial_year');
+    const dateRangeInput = document.getElementById('date_range');
     
     if (!monthSelect.value || !financialYearSelect.value) return;
     
@@ -115,33 +116,78 @@ function initializeDatepicker() {
         datepicker.destroy();
     }
     
-    // Create a new datepicker with the correct month selected
+    // Check if we have a saved date range
+    let savedDateRange = dateRangeInput.value;
+    let defaultDates = [new Date(yearNum, monthNum, 1), new Date(yearNum, monthNum, new Date(yearNum, monthNum + 1, 0).getDate())];
+    
+    // If we have a saved date range, try to parse it
+    if (savedDateRange) {
+        try {
+            const dateParts = savedDateRange.split(' - ');
+            if (dateParts.length === 2) {
+                // Format is typically "DD MMM - DD MMM" (e.g., "01 Jan - 31 Jan")
+                const startParts = dateParts[0].split(' ');
+                const endParts = dateParts[1].split(' ');
+                
+                // Add year component if it's missing from the saved range
+                const startDate = parseDateString(dateParts[0], yearNum);
+                const endDate = parseDateString(dateParts[1], yearNum);
+                
+                if (startDate && endDate) {
+                    defaultDates = [startDate, endDate];
+                }
+            }
+        } catch (e) {
+            console.error('Error parsing saved date range:', e);
+        }
+    }
+    
+    // Create a new datepicker with the correct month selected and range selection enabled
     datepicker = flatpickr("#date_range", {
-        dateFormat: "d M",
-        defaultDate: new Date(yearNum, monthNum, 1),
+        dateFormat: "d M Y",
+        mode: "range", // Enable date range selection
+        defaultDate: defaultDates,
         // Set the initial display to the selected month
         onOpen: function(selectedDates, dateStr, instance) {
-            instance.jumpToDate(new Date(yearNum, monthNum, 1));
+            instance.jumpToDate(defaultDates[0]);
         },
         onChange: function(selectedDates, dateStr, instance) {
-            if (selectedDates.length === 0) return;
+            if (selectedDates.length < 2) return; // Wait until both dates are selected
             
-            const selectedDate = selectedDates[0];
-            const start = new Date(selectedDate);
-            const end = new Date(selectedDate);
-
-            const day = selectedDate.getDay();
-            const diffToMonday = day === 0 ? -6 : 1 - day; // Sunday fix
-            start.setDate(start.getDate() + diffToMonday);
-            end.setDate(start.getDate() + 6);
-
-            const format = d => `${d.getDate().toString().padStart(2, '0')} ${['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][d.getMonth()]}`;
-            instance.input.value = `${format(start)} - ${format(end)}`;
+            const startDate = selectedDates[0];
+            const endDate = selectedDates[1];
+            
+            const formatDate = d => `${d.getDate().toString().padStart(2, '0')} ${['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][d.getMonth()]}`;
+            instance.input.value = `${formatDate(startDate)} - ${formatDate(endDate)}`;
             
             // Mark as user selected
             instance.input._userSelected = true;
         }
     });
+}
+
+// Helper function to parse date strings with or without year component
+function parseDateString(dateStr, defaultYear) {
+    // Try to parse with year first
+    try {
+        const fullDateMatch = dateStr.match(/(\d{1,2})\s+(\w{3})(?:\s+(\d{4}))?/);
+        if (fullDateMatch) {
+            const day = parseInt(fullDateMatch[1], 10);
+            const monthStr = fullDateMatch[2];
+            const year = fullDateMatch[3] ? parseInt(fullDateMatch[3], 10) : defaultYear;
+            
+            const monthMap = {
+                'Jan': 0, 'Feb': 1, 'Mar': 2, 'Apr': 3, 'May': 4, 'Jun': 5,
+                'Jul': 6, 'Aug': 7, 'Sep': 8, 'Oct': 9, 'Nov': 10, 'Dec': 11
+            };
+            
+            const month = monthMap[monthStr];
+            return new Date(year, month, day);
+        }
+    } catch (e) {
+        console.error('Error parsing date string:', e);
+    }
+    return null;
 }
 
 function handleMonthChange() {

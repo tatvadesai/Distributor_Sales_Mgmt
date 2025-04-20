@@ -13,6 +13,23 @@
                     {% include 'filter_component.html' %}
                 {% endwith %}
                 
+                <!-- Period information -->
+                <div class="alert alert-info mb-4">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <h6 class="mb-0"><i class="fas fa-calendar-alt me-2"></i>Currently viewing: 
+                        {% if selected_month == 'All' %}
+                            Entire Financial Year {{ selected_financial_year }}
+                        {% else %}
+                            {{ selected_month }} {{ selected_financial_year }} {% if selected_date_range %} ({{ selected_date_range }}){% endif %}
+                        {% endif %}
+                        </h6>
+                        <a href="{{ url_for('reports') }}?financial_year={{ selected_financial_year }}&month={{ selected_month }}&date_range={{ selected_date_range }}&distributor_id={% if selected_distributor_id %}{{ selected_distributor_id }}{% endif %}" class="btn btn-sm btn-outline-primary">
+                            <i class="fas fa-file-pdf me-1"></i> View Report
+                        </a>
+                    </div>
+                    <small>Results show aggregated data for the selected period. Weekly views use prorated monthly targets.</small>
+                </div>
+                
                 <div class="row mb-4" id="performance-cards">
                     <div class="col-md-4">
                         <div class="card bg-primary text-white">
@@ -31,7 +48,15 @@
                         </div>
                     </div>
                     <div class="col-md-4">
-                        <div class="card bg-info text-white">
+                        <div class="card 
+                            {% if overall_data.achievement_percent >= 100 %}
+                                bg-success
+                            {% elif overall_data.achievement_percent >= 80 %}
+                                bg-warning
+                            {% else %}
+                                bg-danger
+                            {% endif %} 
+                            text-white">
                             <div class="card-body">
                                 <h5 class="card-title"><i class="fas fa-percent me-2"></i>Achievement</h5>
                                 <h3 class="mb-0" id="total-achievement">{{ overall_data.achievement_percent|format_percent }}</h3>
@@ -49,7 +74,6 @@
                                 <th>Distributor</th>
                                 <th class="text-end">Target</th>
                                 <th class="text-end">Actual</th>
-                                <th class="text-end">Achievement (cases)</th>
                                 <th class="text-end">Achievement (%)</th>
                                 <th class="text-end">Shortfall</th>
                             </tr>
@@ -61,7 +85,6 @@
                                         <td>{{ performance.name }}</td>
                                         <td class="text-end">{{ performance.target|format_currency }}</td>
                                         <td class="text-end">{{ performance.actual|format_currency }}</td>
-                                        <td class="text-end">{{ performance.achievement_amount|format_currency }}</td>
                                         <td class="text-end">
                                             <span class="badge rounded-pill {% if performance.achievement_percent >= 100 %}bg-success{% elif performance.achievement_percent >= 80 %}bg-warning{% else %}bg-danger{% endif %}">
                                                 {{ performance.achievement_percent|format_percent }}
@@ -72,7 +95,7 @@
                                 {% endfor %}
                             {% else %}
                                 <tr>
-                                    <td colspan="6" class="text-center">No performance data available for the selected period.</td>
+                                    <td colspan="5" class="text-center">No performance data available for the selected period.</td>
                                 </tr>
                             {% endif %}
                         </tbody>
@@ -119,6 +142,24 @@ function updateDashboardData() {
         document.getElementById('total-actual').textContent = formatCurrency(data.overall_data.actual);
         document.getElementById('total-achievement').textContent = formatPercent(data.overall_data.achievement_percent);
         
+        // Update the achievement color
+        const achievementCard = document.querySelector('.col-md-4:nth-child(3) .card');
+        if (data.overall_data.achievement_percent >= 100) {
+            achievementCard.className = 'card bg-success text-white';
+        } else if (data.overall_data.achievement_percent >= 80) {
+            achievementCard.className = 'card bg-warning text-white';
+        } else {
+            achievementCard.className = 'card bg-danger text-white';
+        }
+        
+        // Update period information in the alert
+        const periodInfo = document.querySelector('.alert.alert-info h6');
+        if (formData.get('month') === 'All') {
+            periodInfo.innerHTML = `<i class="fas fa-calendar-alt me-2"></i>Currently viewing: Entire Financial Year ${formData.get('financial_year')}`;
+        } else {
+            periodInfo.innerHTML = `<i class="fas fa-calendar-alt me-2"></i>Currently viewing: ${formData.get('month')} ${formData.get('financial_year')} (${formData.get('date_range') || ''})`;
+        }
+        
         // Update distributor performance table
         const tableBody = document.getElementById('distributor-performance-table');
         tableBody.innerHTML = '';
@@ -137,7 +178,6 @@ function updateDashboardData() {
                     <td>${performance.name}</td>
                     <td class="text-end">${formatCurrency(performance.target)}</td>
                     <td class="text-end">${formatCurrency(performance.actual)}</td>
-                    <td class="text-end">${formatCurrency(performance.achievement_amount)}</td>
                     <td class="text-end">
                         <span class="badge rounded-pill ${badgeClass}">
                             ${formatPercent(performance.achievement_percent)}
@@ -149,7 +189,7 @@ function updateDashboardData() {
             });
         } else {
             const row = document.createElement('tr');
-            row.innerHTML = '<td colspan="6" class="text-center">No performance data available for the selected period.</td>';
+            row.innerHTML = '<td colspan="5" class="text-center">No performance data available for the selected period.</td>';
             tableBody.appendChild(row);
         }
         
@@ -175,24 +215,22 @@ document.addEventListener('DOMContentLoaded', function() {
             updateDashboardData();
         });
     }
-});
-
-function updatePeriodOptions() {
-    const periodType = document.getElementById('period_type').value;
     
-    fetch(`/api/periods/${periodType}`)
-        .then(response => response.json())
-        .then(periods => {
-            const periodSelect = document.getElementById('period_identifier');
-            periodSelect.innerHTML = '';
-            
-            periods.forEach(period => {
-                const option = document.createElement('option');
-                option.value = period;
-                option.textContent = period;
-                periodSelect.appendChild(option);
-            });
-        });
-}
+    // Format functions for client-side display
+    window.formatCurrency = function(value) {
+        return `${parseFloat(value).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })} cases`;
+    };
+    
+    window.formatPercent = function(value) {
+        return `${parseFloat(value).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}%`;
+    };
+    
+    // Automatically apply filters when page loads
+    // Only trigger if URL doesn't already have filter parameters
+    const urlParams = new URLSearchParams(window.location.search);
+    if (!urlParams.has('financial_year') && !urlParams.has('month') && !urlParams.has('date_range')) {
+        updateDashboardData();
+    }
+});
 </script>
 {% endblock %}
