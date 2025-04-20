@@ -11,25 +11,39 @@
                 <form method="GET" action="{{ url_for('dashboard') }}" id="filterForm">
                     <div class="row g-3 align-items-center mb-4">
                         <div class="col-md-3">
-                            <label for="period_type" class="form-label">Period Type</label>
-                            <select class="form-select" id="period_type" name="period_type" onchange="updatePeriodOptions(); this.form.submit();">
-                                <option value="Weekly" {% if period_type == 'Weekly' %}selected{% endif %}>Weekly</option>
-                                <option value="Monthly" {% if period_type == 'Monthly' %}selected{% endif %}>Monthly</option>
-                                <option value="Quarterly" {% if period_type == 'Quarterly' %}selected{% endif %}>Quarterly</option>
-                                <option value="Yearly" {% if period_type == 'Yearly' %}selected{% endif %}>Yearly</option>
-                            </select>
+                            <label for="financial_year" class="form-label fw-bold">Financial Year:</label>
+                            <div class="input-group">
+                                <select class="form-select rounded-2" id="financial_year" name="financial_year" onchange="updateMonths(); this.form.submit();">
+                                    {% for fy in financial_years %}
+                                        <option value="{{ fy }}" {% if fy == financial_year %}selected{% endif %}>{{ fy }}</option>
+                                    {% endfor %}
+                                </select>
+                                <span class="input-group-text bg-light border-start-0">
+                                    <i class="fas fa-caret-down"></i>
+                                </span>
+                            </div>
                         </div>
                         <div class="col-md-3">
-                            <label for="period_identifier" class="form-label">Period</label>
-                            <select class="form-select" id="period_identifier" name="period_identifier" onchange="this.form.submit();">
-                                {% for period in period_options[period_type] %}
-                                    <option value="{{ period }}" {% if period == period_identifier %}selected{% endif %}>{{ period }}</option>
+                            <label for="month" class="form-label fw-bold">Month:</label>
+                            <select class="form-select rounded-2" id="month" name="month" onchange="this.form.submit();">
+                                <option value="">All Months</option>
+                                {% for m in months %}
+                                    <option value="{{ m }}" {% if m == month %}selected{% endif %}>{{ m }}</option>
                                 {% endfor %}
                             </select>
                         </div>
-                        <div class="col-md-3">
-                            <label for="distributor_id" class="form-label">Distributor (Optional)</label>
-                            <select class="form-select" id="distributor_id" name="distributor_id" onchange="this.form.submit();">
+                        <div class="col-md-4">
+                            <label for="date_range" class="form-label fw-bold">Date Range</label>
+                            <select class="form-select rounded-2" id="date_range" name="date_range" onchange="this.form.submit();">
+                                <option value="">Select Date Range</option>
+                                {% for dr in date_ranges %}
+                                    <option value="{{ dr }}" {% if dr == date_range %}selected{% endif %}>{{ dr }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-2">
+                            <label for="distributor_id" class="form-label fw-bold">Distributor</label>
+                            <select class="form-select rounded-2" id="distributor_id" name="distributor_id" onchange="this.form.submit();">
                                 <option value="">All Distributors</option>
                                 {% for distributor in distributors %}
                                     <option value="{{ distributor.id }}" {% if selected_distributor_id|int == distributor.id %}selected{% endif %}>{{ distributor.name }}</option>
@@ -38,6 +52,18 @@
                         </div>
                     </div>
                 </form>
+                
+                <div class="row mb-3">
+                    <div class="col-md-12">
+                        <h5 class="text-primary">
+                            <i class="fas fa-calendar-alt me-2"></i>
+                            {{ display_period }}
+                            {% if selected_distributor_id %}
+                                ({{ distributors|selectattr('id', 'eq', selected_distributor_id|int)|first|attr('name') }})
+                            {% endif %}
+                        </h5>
+                    </div>
+                </div>
                 
                 <div class="row mb-4">
                     <div class="col-md-4">
@@ -112,21 +138,39 @@
 
 {% block scripts %}
 <script>
-function updatePeriodOptions() {
-    const periodType = document.getElementById('period_type').value;
+function updateMonths() {
+    const financialYear = document.getElementById('financial_year').value;
     
-    fetch(`/api/periods/${periodType}`)
+    fetch(`/api/months/${financialYear}`)
         .then(response => response.json())
-        .then(periods => {
-            const periodSelect = document.getElementById('period_identifier');
-            periodSelect.innerHTML = '';
+        .then(months => {
+            const monthSelect = document.getElementById('month');
+            const currentValue = monthSelect.value;
             
-            periods.forEach(period => {
+            // Save current selection
+            monthSelect.innerHTML = '';
+            
+            // Add default option
+            const defaultOption = document.createElement('option');
+            defaultOption.value = '';
+            defaultOption.textContent = 'All Months';
+            monthSelect.appendChild(defaultOption);
+            
+            // Add months
+            months.forEach(month => {
                 const option = document.createElement('option');
-                option.value = period;
-                option.textContent = period;
-                periodSelect.appendChild(option);
+                option.value = month;
+                option.textContent = month;
+                monthSelect.appendChild(option);
             });
+            
+            // Try to restore selection if it exists in new options
+            if (currentValue) {
+                const exists = Array.from(monthSelect.options).some(option => option.value === currentValue);
+                if (exists) {
+                    monthSelect.value = currentValue;
+                }
+            }
         });
 }
 </script>

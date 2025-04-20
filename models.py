@@ -1,8 +1,8 @@
-from app import db
 from flask_login import UserMixin
 from datetime import datetime
 from sqlalchemy import UniqueConstraint
 from werkzeug.security import check_password_hash
+from database import db
 
 class User(UserMixin, db.Model):
     id = db.Column(db.Integer, primary_key=True)

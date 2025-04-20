@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Targets Management - Prit Enterprise Sales Management</title>
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Custom CSS -->
+    <link rel="stylesheet" href="/static/css/main.css">
+    <style>
+        .targets-table th, .targets-table td {
+            vertical-align: middle;
+            padding: 0.5rem;
+        }
+        .target-form-container {
+            margin-bottom: 1.5rem;
+        }
+        .form-label {
+            font-weight: 500;
+        }
+        .alert-container {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 1050;
+        }
+        .distributor-target-field {
+            margin-bottom: 1rem;
+        }
+    </style>
+</head>
+<body>
+    <!-- Main Navigation -->
+    {% include 'includes/navigation.html' %}
+
+    <!-- Main Content -->
+    <div class="container mt-4">
+        <div class="row">
+            <div class="col-md-12">
+                <h1>Sales Targets Management</h1>
+                <p class="lead">Set and manage sales targets for distributors.</p>
+                <hr>
+            </div>
+        </div>
+
+        <!-- Date Context Selection -->
+        <div class="row mb-4">
+            <div class="col-md-12">
+                <div class="card">
+                    <div class="card-header bg-primary text-white">
+                        <h5 class="card-title mb-0">Select Time Period</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-4">
+                                <div class="form-group mb-3">
+                                    <label for="financial-year-select" class="form-label">Financial Year</label>
+                                    <select id="financial-year-select" class="form-select">
+                                        <option value="">Select Financial Year</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="form-group mb-3">
+                                    <label for="period-type-select" class="form-label">Period Type</label>
+                                    <select id="period-type-select" class="form-select">
+                                        <option value="">Select Period Type</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="form-group mb-3">
+                                    <label for="period-identifier-select" class="form-label">Period</label>
+                                    <select id="period-identifier-select" class="form-select">
+                                        <option value="">Select Period</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Targets Form -->
+        <div class="row mb-4">
+            <div class="col-md-12">
+                <div class="card">
+                    <div class="card-header bg-primary text-white">
+                        <h5 class="card-title mb-0">Set Targets</h5>
+                    </div>
+                    <div class="card-body">
+                        <form id="targets-form">
+                            <div class="row">
+                                <div class="col-md-12">
+                                    <div id="distributor-fields-container">
+                                        <!-- Distributor targets fields will be dynamically added here -->
+                                        <div class="alert alert-info" id="no-distributor-message">
+                                            Please select a time period above to load distributors and set targets.
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="row mt-3">
+                                <div class="col-md-12">
+                                    <button type="submit" id="save-targets-btn" class="btn btn-primary" disabled>
+                                        Save Targets
+                                    </button>
+                                    <button type="button" id="reset-form-btn" class="btn btn-secondary">
+                                        Reset Form
+                                    </button>
+                                </div>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Targets Table -->
+        <div class="row">
+            <div class="col-md-12">
+                <div class="card">
+                    <div class="card-header bg-primary text-white">
+                        <h5 class="card-title mb-0">Current Targets</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="table-responsive">
+                            <table id="targets-table" class="table table-striped table-bordered targets-table">
+                                <thead class="table-dark">
+                                    <tr>
+                                        <th>Distributor</th>
+                                        <th>Target Amount (₹)</th>
+                                        <th>Last Updated</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <!-- Target data will be dynamically added here -->
+                                    <tr id="no-targets-row">
+                                        <td colspan="4" class="text-center">No targets found for the selected period.</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Alert Container for notifications -->
+    <div class="alert-container" id="alert-container"></div>
+
+    <!-- Footer -->
+    {% include 'includes/footer.html' %}
+
+    <!-- Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <!-- Custom Scripts -->
+    <script src="/static/js/date-context-manager.js"></script>
+    <script src="/static/js/targets-manager.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // Initialize Targets Manager
+            const targetsManager = new TargetsManager(
+                'targets-form',
+                'targets-table',
+                'distributor-fields-container',
+                'save-targets-btn',
+                'no-distributor-message'
+            );
+            
+            // Initialize Date Context Manager
+            const dateContextManager = new DateContextManager(
+                'financial-year-select',
+                'period-type-select',
+                'period-identifier-select',
+                targetsManager
+            );
+            
+            // Set the date context manager reference in targets manager
+            targetsManager.setDateContextManager(dateContextManager);
+            
+            // Initialize both managers
+            dateContextManager.init();
+            targetsManager.init();
+            
+            // Handle reset form button
+            document.getElementById('reset-form-btn').addEventListener('click', function() {
+                targetsManager.resetForm();
+            });
+        });
+    </script>
+</body>
+</html> 

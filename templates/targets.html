@@ -1,85 +1,149 @@
-{% extends "layout.html" %}
-
-{% block content %}
-<div class="row mb-4">
-    <div class="col-md-12">
-        <div class="card shadow">
-            <div class="card-header d-flex justify-content-between align-items-center bg-primary text-white">
-                <h5 class="mb-0"><i class="fas fa-bullseye me-2"></i>Targets</h5>
-                <a href="{{ url_for('new_target') }}" class="btn btn-sm btn-light">
-                    <i class="fas fa-plus me-1"></i>Set New Target
-                </a>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sales Targets Management</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <div class="container py-4">
+        <h1 class="mb-4">Sales Targets Management</h1>
+        
+        <div class="card mb-4">
+            <div class="card-header">
+                <h2 class="h5 mb-0">Period Selection</h2>
             </div>
             <div class="card-body">
-                <div class="table-responsive">
-                    <table class="table table-hover table-striped">
-                        <thead class="table-dark">
-                            <tr>
-                                <th>Distributor</th>
-                                <th>Period Type</th>
-                                <th>Period</th>
-                                <th>Date Range</th>
-                                <th class="text-end">Target Value</th>
-                                <th class="text-end">Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {% if targets %}
-                                {% for target in targets %}
+                <div class="row g-3">
+                    <div class="col-md-4">
+                        <label for="financial-year-select" class="form-label">Financial Year</label>
+                        <select id="financial-year-select" class="form-select">
+                            <!-- Options will be populated by JS -->
+                        </select>
+                    </div>
+                    <div class="col-md-4">
+                        <label for="period-type-select" class="form-label">Period Type</label>
+                        <select id="period-type-select" class="form-select">
+                            <option value="monthly">Monthly</option>
+                            <option value="quarterly">Quarterly</option>
+                            <option value="half-yearly">Half-Yearly</option>
+                            <option value="yearly">Yearly</option>
+                        </select>
+                    </div>
+                    <div class="col-md-4">
+                        <label for="period-identifier-select" class="form-label">Period</label>
+                        <select id="period-identifier-select" class="form-select">
+                            <!-- Options will be populated by JS -->
+                        </select>
+                    </div>
+                </div>
+                <div class="mt-3">
+                    <h3 id="period-label" class="h5">Current Period: Not Set</h3>
+                </div>
+            </div>
+        </div>
+
+        <div class="row">
+            <div class="col-md-5">
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <h2 class="h5 mb-0">Add/Edit Target</h2>
+                    </div>
+                    <div class="card-body">
+                        <form id="target-form">
+                            <input type="hidden" id="target-id">
+                            
+                            <div class="mb-3">
+                                <label for="distributor-select" class="form-label">Distributor</label>
+                                <select id="distributor-select" class="form-select" required>
+                                    <option value="">Select Distributor</option>
+                                    <!-- Options will be loaded dynamically -->
+                                </select>
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label for="region-select" class="form-label">Region</label>
+                                <select id="region-select" class="form-select">
+                                    <option value="">All Regions</option>
+                                    <!-- Options will be loaded dynamically -->
+                                </select>
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label for="state-select" class="form-label">State</label>
+                                <select id="state-select" class="form-select">
+                                    <option value="">All States</option>
+                                    <!-- Options will be loaded dynamically -->
+                                </select>
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label for="territory-select" class="form-label">Territory</label>
+                                <select id="territory-select" class="form-select">
+                                    <option value="">All Territories</option>
+                                    <!-- Options will be loaded dynamically -->
+                                </select>
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label for="target-amount" class="form-label">Target Amount ($)</label>
+                                <input type="number" class="form-control" id="target-amount" min="0" step="1000" required>
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label for="target-notes" class="form-label">Notes</label>
+                                <textarea class="form-control" id="target-notes" rows="3"></textarea>
+                            </div>
+                            
+                            <div class="d-flex gap-2">
+                                <button type="button" id="save-target-btn" class="btn btn-primary">Save Target</button>
+                                <button type="button" id="reset-target-btn" class="btn btn-secondary">Reset Form</button>
+                            </div>
+                        </form>
+                        <div id="notification" class="alert mt-3 d-none"></div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="col-md-7">
+                <div class="card">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h2 class="h5 mb-0">Current Targets</h2>
+                        <button id="export-targets-btn" class="btn btn-sm btn-outline-primary">Export</button>
+                    </div>
+                    <div class="card-body">
+                        <div class="table-responsive">
+                            <table id="targets-table" class="table table-striped table-hover">
+                                <thead>
                                     <tr>
-                                        <td>{{ target.distributor.name }}</td>
-                                        <td>{{ target.period_type }}</td>
-                                        <td>{{ target.period_identifier }}</td>
-                                        <td>
-                                            {% if target.period_type == 'Weekly' and target.week_start_date and target.week_end_date %}
-                                                {{ target.week_start_date|format_date }} to {{ target.week_end_date|format_date }}
-                                            {% else %}
-                                                -
-                                            {% endif %}
-                                        </td>
-                                        <td class="text-end">{{ target.target_value|format_currency }}</td>
-                                        <td class="text-end">
-                                            <a href="{{ url_for('edit_target', id=target.id) }}" class="btn btn-sm btn-primary">
-                                                <i class="fas fa-edit"></i>
-                                            </a>
-                                            <button type="button" class="btn btn-sm btn-danger" data-bs-toggle="modal" data-bs-target="#deleteModal{{ target.id }}">
-                                                <i class="fas fa-trash"></i>
-                                            </button>
-                                            
-                                            <!-- Delete Confirmation Modal -->
-                                            <div class="modal fade" id="deleteModal{{ target.id }}" tabindex="-1" aria-labelledby="deleteModalLabel{{ target.id }}" aria-hidden="true">
-                                                <div class="modal-dialog">
-                                                    <div class="modal-content">
-                                                        <div class="modal-header bg-danger text-white">
-                                                            <h5 class="modal-title" id="deleteModalLabel{{ target.id }}"><i class="fas fa-exclamation-triangle me-2"></i>Confirm Deletion</h5>
-                                                            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
-                                                        </div>
-                                                        <div class="modal-body">
-                                                            Are you sure you want to delete the target for <strong>{{ target.distributor.name }}</strong> - {{ target.period_type }} {{ target.period_identifier }}?
-                                                        </div>
-                                                        <div class="modal-footer">
-                                                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal"><i class="fas fa-times me-1"></i>Cancel</button>
-                                                            <form action="{{ url_for('delete_target', id=target.id) }}" method="post" class="d-inline">
-                                                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                                                <button type="submit" class="btn btn-danger"><i class="fas fa-trash me-1"></i>Delete</button>
-                                                            </form>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        </td>
+                                        <th>Distributor</th>
+                                        <th>Region</th>
+                                        <th>State</th>
+                                        <th>Territory</th>
+                                        <th>Target Amount</th>
+                                        <th>Actions</th>
                                     </tr>
-                                {% endfor %}
-                            {% else %}
-                                <tr>
-                                    <td colspan="6" class="text-center">No targets found. Click "Set New Target" to create one.</td>
-                                </tr>
-                            {% endif %}
-                        </tbody>
-                    </table>
+                                </thead>
+                                <tbody>
+                                    <!-- Targets will be loaded dynamically -->
+                                    <tr class="no-targets-row">
+                                        <td colspan="6" class="text-center">No targets set for this period</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
     </div>
-</div>
-{% endblock %}
+
+    <!-- JavaScript -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="/static/js/date-context-manager.js"></script>
+    <script src="/static/js/targets-manager.js"></script>
+    <script src="/static/js/targets-init.js"></script>
+</body>
+</html>

@@ -2,13 +2,13 @@ import os
 import logging
 from datetime import datetime
 from flask import Flask, session, request, render_template
-from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager
-from flask_wtf.csrf import CSRFProtect
+# from flask_wtf.csrf import CSRFProtect
 from werkzeug.middleware.proxy_fix import ProxyFix
-from sqlalchemy.orm import DeclarativeBase
 from dotenv import load_dotenv
 import pathlib
+from werkzeug.security import generate_password_hash
+from database import db, configure_database
 
 # Load environment variables from .env file
 load_dotenv()
@@ -18,15 +18,8 @@ logging_level = logging.DEBUG if os.environ.get("FLASK_DEBUG", "true").lower() =
 logging.basicConfig(level=logging_level, 
                     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 
-# Create base class for SQLAlchemy models
-class Base(DeclarativeBase):
-    pass
-
-# Initialize SQLAlchemy
-db = SQLAlchemy(model_class=Base)
-
 # Initialize CSRF protection
-csrf = CSRFProtect()
+# csrf = CSRFProtect()
 
 # Create Flask app
 app = Flask(__name__)
@@ -34,29 +27,7 @@ app.secret_key = os.environ.get("SESSION_SECRET", "dev_secret_key")
 app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1)
 
 # Configure database
-current_dir = os.path.dirname(os.path.abspath(__file__))
-db_path_env = os.environ.get("DATABASE_PATH")
-
-if db_path_env:
-    # Use the environment variable if provided
-    if os.path.isabs(db_path_env):
-        # Absolute path from environment
-        db_path = db_path_env
-    else:
-        # Relative path from environment - make it absolute
-        db_path = os.path.join(current_dir, db_path_env)
-else:
-    # Default path in /tmp to avoid permission issues
-    db_path = os.path.join("/tmp", "distributor_tracker.db")
-
-# Create directory if it doesn't exist
-db_dir = os.path.dirname(db_path)
-if not os.path.exists(db_dir) and db_dir:
-    os.makedirs(db_dir, exist_ok=True)
-
-print(f"Database path: {db_path}")
-app.config["SQLALCHEMY_DATABASE_URI"] = f"sqlite:///{db_path}"
-app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
+app = configure_database(app)
 
 # Set Flask debug mode from environment
 app.config["DEBUG"] = os.environ.get("FLASK_DEBUG", "True").lower() == "true"
@@ -68,26 +39,28 @@ app.config['REMEMBER_COOKIE_SECURE'] = not app.config["DEBUG"]  # Secure in prod
 app.config['REMEMBER_COOKIE_HTTPONLY'] = True
 app.config['REMEMBER_COOKIE_DURATION'] = 86400  # 1 day in seconds
 
-# Initialize database with app
-db.init_app(app)
-
 # Initialize CSRF protection with app
-csrf.init_app(app)
+# csrf.init_app(app)
 
 # Configure login manager
 login_manager = LoginManager()
 login_manager.init_app(app)
 login_manager.login_view = 'login'
 
-# Import models to ensure tables are created
+# Import models - after db is defined
+from models import User, Distributor, Target, Actual
+
+# User loader for Flask-Login
+@login_manager.user_loader
+def load_user(user_id):
+    return User.query.get(int(user_id))
+
+# Create the tables and admin user inside app context
 with app.app_context():
-    from models import User, Distributor, Target, Actual
+    # Create all tables
     db.create_all()
     
     # Create admin user if it doesn't exist
-    from werkzeug.security import generate_password_hash
-    from models import User
-    
     admin = User.query.filter_by(username='admin').first()
     if not admin:
         admin = User(
@@ -97,12 +70,6 @@ with app.app_context():
         db.session.add(admin)
         db.session.commit()
         logging.info("Created default admin user")
-
-# User loader for Flask-Login
-@login_manager.user_loader
-def load_user(user_id):
-    from models import User
-    return User.query.get(int(user_id))
 
 # Security headers middleware
 @app.after_request
@@ -151,3 +118,10 @@ def format_percent(value):
     if value is not None:
         return f"{value:.2f}%" if value else "0.00%"
     return "0.00%"
+
+# Import routes last to avoid circular imports
+from routes import *
+
+# Run the app
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5001)))

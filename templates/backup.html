@@ -23,7 +23,7 @@
                                 <div class="card-body">
                                     <p>Create a manual backup of your entire database to Supabase.</p>
                                     <form method="POST">
-                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                        
                                         <button type="submit" name="perform_backup" class="btn btn-success">
                                             <i class="fas fa-cloud-upload-alt me-1"></i>Backup Now
                                         </button>
@@ -42,7 +42,7 @@
                                     
                                     {% if available_backups %}
                                         <form method="POST" onsubmit="return confirm('Are you sure you want to restore from this backup? All current data will be replaced.');">
-                                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                            
                                             <div class="mb-3">
                                                 <label for="backup_id" class="form-label">Select Backup</label>
                                                 <select class="form-select" id="backup_id" name="backup_id" required>

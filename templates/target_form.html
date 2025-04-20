@@ -12,7 +12,7 @@
             </div>
             <div class="card-body">
                 <form method="POST" action="{{ url_for('edit_target', id=target.id) if target else url_for('new_target') }}">
-                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    
                     <div class="mb-3">
                         <label for="distributor_id" class="form-label">Distributor <span class="text-danger">*</span></label>
                         <select class="form-select" id="distributor_id" name="distributor_id" required>
@@ -32,7 +32,6 @@
                                 <option value="">Select Period Type</option>
                                 <option value="Weekly" {% if target and target.period_type == 'Weekly' %}selected{% endif %}>Weekly</option>
                                 <option value="Monthly" {% if target and target.period_type == 'Monthly' %}selected{% endif %}>Monthly</option>
-                                <option value="Quarterly" {% if target and target.period_type == 'Quarterly' %}selected{% endif %}>Quarterly</option>
                                 <option value="Yearly" {% if target and target.period_type == 'Yearly' %}selected{% endif %}>Yearly</option>
                             </select>
                         </div>

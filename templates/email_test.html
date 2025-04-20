@@ -30,7 +30,7 @@
                 <div class="mb-4">
                     <h6>Send Test Email</h6>
                     <form method="POST" action="{{ url_for('test_email') }}">
-                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        
                         <div class="mb-3">
                             <label for="recipient_email" class="form-label">Recipient Email <span class="text-danger">*</span></label>
                             <input type="email" class="form-control" id="recipient_email" name="recipient_email" required placeholder="Enter email to send test to">

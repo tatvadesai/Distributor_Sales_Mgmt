@@ -1,0 +1,383 @@
+{% extends "layout.html" %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-md-12">
+        <div class="card shadow">
+            <div class="card-header d-flex justify-content-between align-items-center bg-primary text-white">
+                <h5 class="mb-0"><i class="fas fa-chart-line me-2"></i>Actuals Management</h5>
+                <a href="{{ url_for('new_actual') }}" class="btn btn-sm btn-light">
+                    <i class="fas fa-plus me-1"></i>Add New Actual
+                </a>
+            </div>
+            <div class="card-body">
+                <!-- Context Selection Form -->
+                <div class="card mb-4 border-secondary">
+                    <div class="card-header bg-secondary text-white">
+                        <h6 class="mb-0">Select Date Context</h6>
+                    </div>
+                    <div class="card-body">
+                        <form id="dateContextForm">
+                            <div class="row">
+                                <div class="col-md-4">
+                                    <div class="mb-3">
+                                        <label for="financial_year" class="form-label">Financial Year</label>
+                                        <select class="form-select" id="financial_year">
+                                            <!-- Will be populated by JS -->
+                                        </select>
+                                    </div>
+                                </div>
+                                <div class="col-md-4">
+                                    <div class="mb-3">
+                                        <label for="period_type" class="form-label">Period Type</label>
+                                        <select class="form-select" id="period_type">
+                                            <option value="Weekly">Weekly</option>
+                                            <option value="Monthly">Monthly</option>
+                                            <option value="Yearly">Yearly</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                <div class="col-md-4">
+                                    <div class="mb-3">
+                                        <label for="period_identifier" class="form-label">Period</label>
+                                        <select class="form-select" id="period_identifier">
+                                            <!-- Will be populated by JS -->
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="alert alert-danger error-message" style="display: none;">
+                                Please enter an actual value and select a date range
+                            </div>
+                        </form>
+                    </div>
+                </div>
+                
+                <div class="alert alert-danger error-message" style="display: none;">
+                    Please enter an actual value and select a date range
+                </div>
+                
+                <!-- Distributor Actual Rows -->
+                <div class="card mt-4 mb-3 border-secondary">
+                    <div class="card-header bg-secondary text-white">
+                        <h6 class="mb-0">Set Actuals for Distributors</h6>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            {% for distributor in distributors %}
+                            <div class="col-12 mb-3">
+                                <div class="distributor-actual-container" data-distributor-id="{{ distributor.id }}">
+                                    <div class="row align-items-center">
+                                        <div class="col-md-5">
+                                            <div class="distributor-row" data-distributor-id="{{ distributor.id }}">
+                                                <div class="card h-100 bg-dark border-secondary">
+                                                    <div class="card-body">
+                                                        <h5 class="card-title">{{ distributor.name }}</h5>
+                                                        <div class="text-muted small">{{ distributor.area or 'No area specified' }}</div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-7">
+                                            <form class="actual-form">
+                                                <input type="hidden" name="distributor_id" value="{{ distributor.id }}">
+                                                <input type="hidden" name="period_type" class="hidden-period-type">
+                                                <input type="hidden" name="period_identifier" class="hidden-period-identifier">
+                                                
+                                                <div class="input-group mb-2">
+                                                    <input 
+                                                        type="number" 
+                                                        class="form-control actual-value" 
+                                                        name="actual_value" 
+                                                        placeholder="Enter actual value"
+                                                        step="0.01" 
+                                                        min="0" 
+                                                        data-distributor-id="{{ distributor.id }}"
+                                                    >
+                                                    <span class="input-group-text">cases</span>
+                                                    <button type="submit" class="btn btn-primary save-actual-btn">
+                                                        <i class="fas fa-save"></i>
+                                                    </button>
+                                                </div>
+                                                
+                                                <div class="actual-status small text-success"></div>
+                                                
+                                                <!-- Target Comparison (if available) -->
+                                                <div class="target-comparison small mt-1" data-distributor-id="{{ distributor.id }}"></div>
+                                            </form>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Actual List Table -->
+                <div class="card mt-4 border-secondary">
+                    <div class="card-header bg-secondary text-white">
+                        <h6 class="mb-0">All Actuals</h6>
+                    </div>
+                    <div class="card-body">
+                        <div class="table-responsive">
+                            <table class="table table-hover table-striped">
+                                <thead>
+                                    <tr>
+                                        <th>Distributor</th>
+                                        <th>Period</th>
+                                        <th>Actual</th>
+                                        <th>Target</th>
+                                        <th>% of Target</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for actual in actuals %}
+                                    <tr>
+                                        <td>{{ actual.distributor.name }}</td>
+                                        <td>
+                                            {% if actual.period_type == 'Weekly' and actual.week_start_date %}
+                                                {{ actual.week_start_date }} to {{ actual.week_end_date }}
+                                            {% else %}
+                                                {{ actual.period_type }}: {{ actual.period_identifier }}
+                                            {% endif %}
+                                        </td>
+                                        <td>{{ actual.actual_value|round(2) }} cases</td>
+                                        <td>
+                                            {% if actual.target %}
+                                                {{ actual.target.target_value|round(2) }} cases
+                                            {% else %}
+                                                No target
+                                            {% endif %}
+                                        </td>
+                                        <td>
+                                            {% if actual.target and actual.target.target_value > 0 %}
+                                                {% set percentage = (actual.actual_value / actual.target.target_value * 100)|round(2) %}
+                                                <span class="badge {% if percentage >= 100 %}bg-success{% elif percentage >= 80 %}bg-warning{% else %}bg-danger{% endif %}">
+                                                    {{ percentage }}%
+                                                </span>
+                                            {% else %}
+                                                N/A
+                                            {% endif %}
+                                        </td>
+                                        <td>
+                                            <div class="btn-group">
+                                                <a href="{{ url_for('edit_actual', id=actual.id) }}" class="btn btn-sm btn-outline-primary">
+                                                    <i class="fas fa-edit"></i>
+                                                </a>
+                                                <button type="button" class="btn btn-sm btn-outline-danger" 
+                                                        data-bs-toggle="modal" data-bs-target="#deleteModal{{ actual.id }}">
+                                                    <i class="fas fa-trash"></i>
+                                                </button>
+                                            </div>
+                                            
+                                            <!-- Delete Modal -->
+                                            <div class="modal fade" id="deleteModal{{ actual.id }}" tabindex="-1" aria-hidden="true">
+                                                <div class="modal-dialog">
+                                                    <div class="modal-content">
+                                                        <div class="modal-header">
+                                                            <h5 class="modal-title">Confirm Delete</h5>
+                                                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                                                        </div>
+                                                        <div class="modal-body">
+                                                            Are you sure you want to delete the actual for {{ actual.distributor.name }} 
+                                                            ({{ actual.period_type }}: {{ actual.period_identifier }})?
+                                                        </div>
+                                                        <div class="modal-footer">
+                                                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                                                            <form action="{{ url_for('delete_actual', id=actual.id) }}" method="POST" class="d-inline">
+                                                                <button type="submit" class="btn btn-danger">Delete</button>
+                                                            </form>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<!-- Include the date context manager script -->
+<script src="{{ url_for('static', filename='js/date-context.js') }}"></script>
+
+<script>
+$(document).ready(function() {
+    // Initialize date context manager
+    const dateContextManager = new DateContextManager('financial_year', 'period_type', 'period_identifier');
+    
+    // Load initial data
+    dateContextManager.loadFinancialYears().then(() => {
+        dateContextManager.onPeriodTypeChange();
+    });
+    
+    // Handle period type change
+    $('#period_type').on('change', function() {
+        dateContextManager.onPeriodTypeChange();
+    });
+    
+    // Handle financial year change
+    $('#financial_year').on('change', function() {
+        dateContextManager.onFinancialYearChange();
+    });
+    
+    // Handle period change
+    $('#period_identifier').on('change', function() {
+        updateHiddenFields();
+        checkExistingActuals();
+    });
+    
+    // Update hidden fields in forms
+    function updateHiddenFields() {
+        const periodType = $('#period_type').val();
+        const periodIdentifier = $('#period_identifier').val();
+        
+        $('.hidden-period-type').val(periodType);
+        $('.hidden-period-identifier').val(periodIdentifier);
+    }
+    
+    // Check for existing actuals and targets
+    function checkExistingActuals() {
+        const periodType = $('#period_type').val();
+        const periodIdentifier = $('#period_identifier').val();
+        
+        if (!periodType || !periodIdentifier) return;
+        
+        // Clear all actual fields
+        $('.actual-value').val('');
+        $('.actual-status').text('');
+        $('.target-comparison').text('');
+        
+        // Get start and end dates
+        let startDate, endDate;
+        if (periodType === 'Weekly' && periodIdentifier.includes(' to ')) {
+            const dates = periodIdentifier.split(' to ');
+            startDate = dates[0];
+            endDate = dates[1];
+        }
+        
+        // Get actuals for this period
+        $.getJSON('/api/actuals', { 
+            period_type: periodType, 
+            period_identifier: periodIdentifier,
+            start_date: startDate,
+            end_date: endDate
+        })
+        .done(function(actuals) {
+            // Populate actual values
+            actuals.forEach(function(actual) {
+                const input = $(`.actual-value[data-distributor-id="${actual.distributor_id}"]`);
+                input.val(actual.actual_value);
+            });
+        })
+        .fail(function(error) {
+            console.error('Failed to get actuals:', error);
+        });
+        
+        // Get targets for this period to show comparison
+        $.getJSON('/api/targets', { 
+            period_type: periodType, 
+            period_identifier: periodIdentifier,
+            start_date: startDate,
+            end_date: endDate
+        })
+        .done(function(targets) {
+            // Populate target information for comparison
+            targets.forEach(function(target) {
+                const targetComparisonEl = $(`.target-comparison[data-distributor-id="${target.distributor_id}"]`);
+                targetComparisonEl.html(`<span class="text-info">Target: ${target.target_value} cases</span>`);
+            });
+        })
+        .fail(function(error) {
+            console.error('Failed to get targets for comparison:', error);
+        });
+    }
+    
+    // Handle actual form submission
+    $('.actual-form').on('submit', function(e) {
+        e.preventDefault();
+        
+        const form = $(this);
+        const distributorId = form.find('input[name="distributor_id"]').val();
+        const actualValue = form.find('.actual-value').val();
+        const periodType = $('#period_type').val();
+        const periodIdentifier = $('#period_identifier').val();
+        const statusDiv = form.find('.actual-status');
+        
+        // Validate inputs
+        if (!actualValue) {
+            $('.error-message').show();
+            return;
+        }
+        
+        if (!periodType || !periodIdentifier) {
+            $('.error-message').show();
+            return;
+        }
+        
+        $('.error-message').hide();
+        
+        // Additional date parameters for weekly periods
+        let additionalData = {};
+        if (periodType === 'Weekly' && periodIdentifier.includes(' to ')) {
+            const dates = periodIdentifier.split(' to ');
+            additionalData = {
+                week_start_date: dates[0],
+                week_end_date: dates[1]
+            };
+        }
+        
+        // Save actual
+        $.ajax({
+            url: '/api/save_actual',
+            method: 'POST',
+            data: {
+                distributor_id: distributorId,
+                period_type: periodType,
+                period_identifier: periodIdentifier,
+                actual_value: actualValue,
+                ...additionalData
+            },
+            success: function(response) {
+                if (response.success) {
+                    // Show success message
+                    statusDiv.text('Saved').addClass('text-success').removeClass('text-danger');
+                    
+                    // Briefly highlight the row to indicate success
+                    const container = form.closest('.distributor-actual-container');
+                    container.addClass('highlight-save');
+                    setTimeout(() => {
+                        container.removeClass('highlight-save');
+                    }, 1500);
+                    
+                    // Refresh table after a delay
+                    setTimeout(() => {
+                        window.location.reload();
+                    }, 1000);
+                } else {
+                    statusDiv.text(response.message).addClass('text-danger').removeClass('text-success');
+                }
+            },
+            error: function(xhr) {
+                const response = xhr.responseJSON;
+                statusDiv.text(response?.message || 'Error saving actual').addClass('text-danger').removeClass('text-success');
+            }
+        });
+    });
+    
+    // Initial setup
+    updateHiddenFields();
+    setTimeout(checkExistingActuals, 500);
+});
+</script>
+{% endblock %} 

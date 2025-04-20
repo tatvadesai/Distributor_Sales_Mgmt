@@ -51,75 +51,66 @@ def get_current_week_end():
 
 def get_period_weeks(period_type, period_identifier):
     """
-    Get list of week start dates for a given period
+    Get all week start dates for a specific period
     
     Args:
-        period_type (str): 'Weekly', 'Monthly', 'Quarterly', 'Yearly'
-        period_identifier (str): Period identifier like 'Apr-2025', 'Q2-2025', '2025'
+        period_type (str): 'Weekly', 'Monthly', 'Yearly'
+        period_identifier (str): Period identifier (e.g., 'Wk 16-2025', 'Apr-2025', '2025')
         
     Returns:
         list: List of week start dates in 'YYYY-MM-DD' format
     """
     if period_type == 'Weekly':
-        # Assuming period_identifier is in 'Wk XX-YYYY' format
-        parts = period_identifier.split(' ')
-        if len(parts) >= 2:
-            week_num = int(parts[1].split('-')[0])
-            year = int(parts[1].split('-')[1])
-            # Calculate the date of the first day of the week
-            first_day = datetime(year, 1, 1)
-            if first_day.weekday() != 0:  # If not Monday
-                first_day = first_day - timedelta(days=first_day.weekday())
-            week_start = first_day + timedelta(weeks=week_num-1)
-            return [week_start.strftime('%Y-%m-%d')]
-        return []
-        
+        # Assuming period_identifier can be in 'Wk X-YYYY' format or 'YYYY-MM-DD to YYYY-MM-DD' format
+        if ' to ' in period_identifier:
+            try:
+                start_date, end_date = period_identifier.split(' to ')
+                return [start_date]
+            except:
+                return []
+            
+        try:
+            # For format 'Wk X-YYYY'
+            parts = period_identifier.split('-')
+            week_num = int(parts[0].replace('Wk ', ''))
+            year = int(parts[1])
+            
+            # Calculate the date for this week
+            first_day_of_year = datetime(year, 1, 1)
+            days_to_first_monday = (7 - first_day_of_year.weekday()) % 7
+            first_monday = first_day_of_year + timedelta(days=days_to_first_monday)
+            target_monday = first_monday + timedelta(weeks=week_num-1)
+            
+            return [target_monday.strftime('%Y-%m-%d')]
+        except ValueError:
+            return []
+            
     elif period_type == 'Monthly':
         # Assuming period_identifier is in 'MMM-YYYY' format
         try:
-            date = datetime.strptime(period_identifier, '%b-%Y')
-            start_month = date.replace(day=1)
+            month_name, year = period_identifier.split('-')
+            month_names = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+            month = month_names.index(month_name) + 1
+            year = int(year)
+            
+            start_date = datetime(year, month, 1)
+            if month == 12:
+                end_date = datetime(year+1, 1, 1) - timedelta(days=1)
+            else:
+                end_date = datetime(year, month+1, 1) - timedelta(days=1)
+            
             # Get all Mondays in the month
             weeks = []
-            current = start_month - timedelta(days=start_month.weekday())  # First Monday before or on month start
-            if current.month != start_month.month:
+            current = start_date - timedelta(days=start_date.weekday())  # First Monday before or on month start
+            if current.month != month:
                 current += timedelta(days=7)  # First Monday in the month
             
-            while current.month == start_month.month:
+            while current.date() <= end_date.date():
                 weeks.append(current.strftime('%Y-%m-%d'))
                 current += timedelta(days=7)
             
             return weeks
         except ValueError:
-            return []
-            
-    elif period_type == 'Quarterly':
-        # Assuming period_identifier is in 'QX-YYYY' format
-        try:
-            quarter = int(period_identifier[1])
-            year = int(period_identifier.split('-')[1])
-            
-            # Define the months in the quarter
-            start_month = (quarter - 1) * 3 + 1
-            months = [start_month, start_month + 1, start_month + 2]
-            
-            # Get all weeks for each month in the quarter
-            weeks = []
-            for month in months:
-                start_date = datetime(year, month, 1)
-                # Get all Mondays in the month
-                current = start_date - timedelta(days=start_date.weekday())  # First Monday before or on month start
-                if current.month != month:
-                    current += timedelta(days=7)  # First Monday in the month
-                
-                end_date = (datetime(year, month+1, 1) if month < 12 else datetime(year+1, 1, 1)) - timedelta(days=1)
-                
-                while current.date() <= end_date.date():
-                    weeks.append(current.strftime('%Y-%m-%d'))
-                    current += timedelta(days=7)
-            
-            return weeks
-        except (ValueError, IndexError):
             return []
             
     elif period_type == 'Yearly':
@@ -151,7 +142,7 @@ def generate_performance_data(distributor_id, period_type, period_identifier, db
     
     Args:
         distributor_id: ID of the distributor (None for all)
-        period_type: 'Weekly', 'Monthly', 'Quarterly', 'Yearly'
+        period_type: 'Weekly', 'Monthly', 'Yearly'
         period_identifier: The specific period
         db: Database session
         Actual, Target: Database models
@@ -180,11 +171,6 @@ def generate_performance_data(distributor_id, period_type, period_identifier, db
                 distributor_id=distributor_id,
                 month=period_identifier
             )
-        elif period_type == 'Quarterly':
-            actual_query = Actual.query.filter_by(
-                distributor_id=distributor_id,
-                quarter=period_identifier
-            )
         elif period_type == 'Yearly':
             actual_query = Actual.query.filter_by(
                 distributor_id=distributor_id,
@@ -202,8 +188,6 @@ def generate_performance_data(distributor_id, period_type, period_identifier, db
             actual_query = Actual.query.filter_by(week_start_date=week_date) if week_date else Actual.query.filter_by(id=-1)  # No results if invalid
         elif period_type == 'Monthly':
             actual_query = Actual.query.filter_by(month=period_identifier)
-        elif period_type == 'Quarterly':
-            actual_query = Actual.query.filter_by(quarter=period_identifier)
         elif period_type == 'Yearly':
             actual_query = Actual.query.filter_by(year=period_identifier)
     
@@ -232,8 +216,6 @@ def generate_performance_data(distributor_id, period_type, period_identifier, db
             total_actual = total_actual.filter(Actual.id == -1)  # No results if invalid
     elif period_type == 'Monthly':
         total_actual = total_actual.filter(Actual.month == period_identifier)
-    elif period_type == 'Quarterly':
-        total_actual = total_actual.filter(Actual.quarter == period_identifier)
     elif period_type == 'Yearly':
         total_actual = total_actual.filter(Actual.year == period_identifier)
     
@@ -258,7 +240,7 @@ def generate_pdf_report(distributor_name, period_type, period_identifier, perfor
     
     Args:
         distributor_name (str): Name of the distributor
-        period_type (str): Type of period (Weekly, Monthly, Quarterly, Yearly)
+        period_type (str): Type of period (Weekly, Monthly, Yearly)
         period_identifier (str): Specific period identifier
         performance_data (dict): Performance metrics
         
@@ -330,7 +312,7 @@ def generate_excel_report(distributor_name, period_type, period_identifier, perf
     
     Args:
         distributor_name (str): Name of the distributor
-        period_type (str): Type of period (Weekly, Monthly, Quarterly, Yearly)
+        period_type (str): Type of period (Weekly, Monthly, Yearly)
         period_identifier (str): Specific period identifier
         performance_data (dict): Performance metrics
         
@@ -371,15 +353,15 @@ def generate_excel_report(distributor_name, period_type, period_identifier, perf
 
 def send_email_report(recipient_email, distributor_name, period_type, period_identifier, pdf_data, excel_data=None):
     """
-    Send performance report via email
+    Send email with PDF and optional Excel reports
     
     Args:
         recipient_email (str): Email address of recipient
-        distributor_name (str): Name of the distributor
-        period_type (str): Type of period
+        distributor_name (str): Name of distributor
+        period_type (str): Type of period (Weekly, Monthly, Yearly)
         period_identifier (str): Specific period identifier
-        pdf_data (bytes): PDF report as bytes
-        excel_data (bytes, optional): Excel report as bytes
+        pdf_data (bytes): PDF file contents
+        excel_data (bytes, optional): Excel file contents
         
     Returns:
         bool: True if email sent successfully, False otherwise
@@ -662,3 +644,124 @@ def send_test_email(recipient_email):
             'success': False,
             'message': error_msg
         }
+
+def get_standardized_date_range(request_args, default_to_current=True):
+    """
+    Provides a standardized way to handle date ranges across the application.
+    
+    Args:
+        request_args: The request.args dictionary from Flask
+        default_to_current: Whether to default to current period if not specified
+        
+    Returns:
+        dict: Contains date range information with keys:
+            - period_type: 'Weekly', 'Monthly', or 'Yearly'
+            - period_identifier: The identifier for the period
+            - start_date: Start date string in YYYY-MM-DD format
+            - end_date: End date string in YYYY-MM-DD format
+            - display_text: Formatted text for display
+    """
+    from datetime import datetime, timedelta
+    
+    today = datetime.now()
+    current_fin_year = get_financial_year(today)
+    
+    # Get filters from request or use defaults
+    financial_year = request_args.get('financial_year', current_fin_year)
+    month = request_args.get('month', None)
+    date_range = request_args.get('date_range', None)
+    
+    result = {
+        'period_type': None,
+        'period_identifier': None,
+        'start_date': None,
+        'end_date': None,
+        'display_text': None
+    }
+    
+    # Determine period type and identifier based on filters
+    if date_range:
+        result['period_type'] = 'Weekly'
+        result['period_identifier'] = date_range
+        
+        # Extract start and end dates from the format "YYYY-MM-DD to YYYY-MM-DD"
+        if ' to ' in date_range:
+            start_date, end_date = date_range.split(' to ')
+            result['start_date'] = start_date
+            result['end_date'] = end_date
+            result['display_text'] = f"Week: {start_date} to {end_date}"
+    elif month:
+        result['period_type'] = 'Monthly'
+        result['period_identifier'] = month
+        
+        # Extract month details
+        if '-' in month:
+            # Check if the month value contains multiple hyphens
+            if month.count('-') > 1:
+                # Handle the case where month format is incorrect or contains multiple hyphens
+                # This is likely causing our "too many values to unpack" error
+                # Default to current month in this case
+                today = datetime.now()
+                month_name = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 
+                             'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][today.month - 1]
+                year = get_financial_year(today)
+                
+                # Log the problematic value
+                print(f"Warning: Invalid month format '{month}' - defaulting to {month_name}-{year}")
+            else:
+                month_name, year = month.split('-')
+                
+            # Calculate start and end dates for the month
+            month_index = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 
+                          'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'].index(month_name) + 1
+            
+            # Financial year starts in April, so Jan-Mar are in the next calendar year
+            calendar_year = int(year)
+            if month_index <= 3:  # Jan, Feb, Mar
+                calendar_year += 1
+                
+            # First day of month
+            if month_index == 2:  # February - check for leap year
+                if calendar_year % 4 == 0 and (calendar_year % 100 != 0 or calendar_year % 400 == 0):
+                    last_day = 29
+                else:
+                    last_day = 28
+            elif month_index in [4, 6, 9, 11]:  # Apr, Jun, Sep, Nov
+                last_day = 30
+            else:
+                last_day = 31
+                
+            result['start_date'] = f"{calendar_year}-{month_index:02d}-01"
+            result['end_date'] = f"{calendar_year}-{month_index:02d}-{last_day}"
+            result['display_text'] = f"Month: {month_name}, {year}"
+    else:
+        result['period_type'] = 'Yearly'
+        result['period_identifier'] = financial_year
+        
+        # Calculate financial year dates (April 1 to March 31)
+        # Handle financial year formats like 'FY25' or '2025-2026'
+        if financial_year.startswith('FY'):
+            # Format like 'FY25' or 'FY25-26'
+            year_part = financial_year[2:].split('-')[0]
+            start_year = 2000 + int(year_part) if int(year_part) < 100 else int(year_part)
+        else:
+            # Standard format like '2025-2026'
+            start_year = int(financial_year.split('-')[0])
+            
+        end_year = start_year + 1
+        result['start_date'] = f"{start_year}-04-01"
+        result['end_date'] = f"{end_year}-03-31"
+        result['display_text'] = f"Financial Year: {financial_year}"
+    
+    # If we need defaults and nothing was specified
+    if default_to_current and not any([date_range, month, financial_year]):
+        # Default to current week
+        current_week_start = (today - timedelta(days=today.weekday())).strftime('%Y-%m-%d')
+        current_week_end = (today + timedelta(days=6-today.weekday())).strftime('%Y-%m-%d')
+        result['period_type'] = 'Weekly'
+        result['period_identifier'] = f"{current_week_start} to {current_week_end}"
+        result['start_date'] = current_week_start
+        result['end_date'] = current_week_end
+        result['display_text'] = f"Week: {current_week_start} to {current_week_end}"
+    
+    return result

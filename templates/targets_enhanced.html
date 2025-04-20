@@ -1,0 +1,280 @@
+{% extends "layout.html" %}
+
+{% block content %}
+<div class="container">
+    <h1 class="mb-4">
+        <i class="fas fa-bullseye me-2"></i>Sales Targets
+    </h1>
+    
+    <div class="card shadow mb-4 target-form">
+        <div class="card-header bg-dark text-white">
+            <h5 class="mb-0">Set Target For:</h5>
+        </div>
+        <div class="card-body bg-dark text-white">
+            <!-- Date Context Selection -->
+            <div class="row mb-3">
+                <div class="col-md-4">
+                    <label for="financial-year" class="form-label">Financial Year:</label>
+                    <select class="form-select fy-select" id="financial-year">
+                        <option value="">Select Financial Year</option>
+                    </select>
+                </div>
+                <div class="col-md-4">
+                    <label for="month" class="form-label">Month:</label>
+                    <select class="form-select month-select" id="month">
+                        <option value="all">All Months</option>
+                    </select>
+                </div>
+                <div class="col-md-4">
+                    <label for="date-range" class="form-label">Date Range:</label>
+                    <div class="input-group">
+                        <input type="date" class="form-control date-range-start" id="date-range-start">
+                        <span class="input-group-text">to</span>
+                        <input type="date" class="form-control date-range-end" id="date-range-end">
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Context Display -->
+            <div class="alert alert-info context-display mb-4">
+                Scope: Select financial year, month, or date range to set targets
+            </div>
+            
+            <!-- Distributor Target Rows -->
+            <div class="row">
+                <div class="col-md-6">
+                    <h6 class="mb-3">Distributor:</h6>
+                    {% for distributor in distributors %}
+                    <div class="mb-3 distributor-row" data-distributor-id="{{ distributor.id }}">
+                        <div class="card bg-dark border-secondary">
+                            <div class="card-body">
+                                <h5 class="card-title">{{ distributor.name }}</h5>
+                                <div class="text-muted small">{{ distributor.area or 'No area specified' }}</div>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                
+                <div class="col-md-6">
+                    <h6 class="mb-3">Target:</h6>
+                    {% for distributor in distributors %}
+                    <div class="mb-3 distributor-row" data-distributor-id="{{ distributor.id }}">
+                        <form class="target-input-form">
+                            <input type="hidden" name="distributor_id" value="{{ distributor.id }}">
+                            <input type="hidden" name="week_start_date" class="hidden-start-date">
+                            <input type="hidden" name="week_end_date" class="hidden-end-date">
+                            
+                            <div class="input-group">
+                                <input 
+                                    type="number" 
+                                    class="form-control target-value" 
+                                    name="target_value" 
+                                    placeholder="Enter target" 
+                                    step="0.01" 
+                                    min="0" 
+                                    data-distributor-id="{{ distributor.id }}"
+                                    required
+                                >
+                                <span class="input-group-text">cases</span>
+                                <button type="submit" class="btn btn-primary save-target-btn">
+                                    <i class="fas fa-save"></i>
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="row mt-4">
+        <div class="col-12">
+            <div class="card shadow">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="mb-0">
+                        <i class="fas fa-list me-2"></i>Target History
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-striped table-hover">
+                            <thead>
+                                <tr>
+                                    <th>Distributor</th>
+                                    <th>Period</th>
+                                    <th>Target</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for target in targets %}
+                                <tr>
+                                    <td>{{ target.distributor.name }}</td>
+                                    <td>
+                                        {% if target.period_type == 'Weekly' and target.week_start_date %}
+                                            {{ target.week_start_date }} to {{ target.week_end_date }}
+                                        {% else %}
+                                            {{ target.period_type }}: {{ target.period_identifier }}
+                                        {% endif %}
+                                    </td>
+                                    <td>{{ target.target_value|round(2) }} cases</td>
+                                    <td>
+                                        <div class="btn-group">
+                                            <a href="{{ url_for('edit_target', id=target.id) }}" class="btn btn-sm btn-outline-primary">
+                                                <i class="fas fa-edit"></i>
+                                            </a>
+                                            <button type="button" class="btn btn-sm btn-outline-danger" 
+                                                    data-bs-toggle="modal" data-bs-target="#deleteModal{{ target.id }}">
+                                                <i class="fas fa-trash"></i>
+                                            </button>
+                                        </div>
+                                        
+                                        <!-- Delete Modal -->
+                                        <div class="modal fade" id="deleteModal{{ target.id }}" tabindex="-1" aria-hidden="true">
+                                            <div class="modal-dialog">
+                                                <div class="modal-content">
+                                                    <div class="modal-header">
+                                                        <h5 class="modal-title">Confirm Delete</h5>
+                                                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                                                    </div>
+                                                    <div class="modal-body">
+                                                        Are you sure you want to delete the target for {{ target.distributor.name }} 
+                                                        ({{ target.period_type }}: {{ target.period_identifier }})?
+                                                    </div>
+                                                    <div class="modal-footer">
+                                                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                                                        <form action="{{ url_for('delete_target', id=target.id) }}" method="POST" class="d-inline">
+                                                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                                            <button type="submit" class="btn btn-danger">Delete</button>
+                                                        </form>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<!-- Include the date context manager script -->
+<script src="{{ url_for('static', filename='js/date-context.js') }}"></script>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Handle target form submissions
+    const targetForms = document.querySelectorAll('.target-input-form');
+    
+    targetForms.forEach(form => {
+        form.addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            const formData = new FormData(form);
+            const distributorId = formData.get('distributor_id');
+            const targetValue = formData.get('target_value');
+            const startDate = formData.get('week_start_date');
+            const endDate = formData.get('week_end_date');
+            
+            if (!targetValue || !startDate || !endDate) {
+                alert('Please enter a target value and select a date range');
+                return;
+            }
+            
+            // Get the context values
+            const context = window.targetDateContext.getCurrentContext();
+            
+            // Add period info based on context
+            if (context.month === 'all') {
+                // Full financial year
+                formData.append('period_type', 'Yearly');
+                formData.append('period_identifier', context.financialYear.replace('FY', ''));
+            } else if (context.month === 'custom') {
+                // Custom date range
+                formData.append('period_type', 'Weekly');
+                // No period identifier needed for custom dates
+            } else {
+                // Specific month
+                formData.append('period_type', 'Monthly');
+                formData.append('period_identifier', context.month);
+            }
+            
+            // Send the data to the server
+            fetch('/api/save_target', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    // Show success message
+                    alert('Target saved successfully!');
+                    
+                    // Clear the input
+                    form.querySelector('.target-value').value = '';
+                    
+                    // Reload the page to show updated data
+                    window.location.reload();
+                } else {
+                    alert('Error: ' + data.message);
+                }
+            })
+            .catch(error => {
+                console.error('Error saving target:', error);
+                alert('Error saving target. Please try again.');
+            });
+        });
+    });
+    
+    // Pre-populate target values if they exist
+    function populateExistingTargets() {
+        const context = window.targetDateContext.getCurrentContext();
+        if (!context.dateRangeStart || !context.dateRangeEnd) return;
+        
+        // Format for API request
+        const startDate = context.dateRangeStart;
+        const endDate = context.dateRangeEnd;
+        
+        fetch(`/api/targets?start_date=${startDate}&end_date=${endDate}`)
+            .then(response => response.json())
+            .then(targets => {
+                // Clear all target inputs first
+                document.querySelectorAll('.target-value').forEach(input => {
+                    input.value = '';
+                });
+                
+                // Populate values for each distributor
+                targets.forEach(target => {
+                    const input = document.querySelector(`.target-value[data-distributor-id="${target.distributor_id}"]`);
+                    if (input) {
+                        input.value = target.target_value;
+                    }
+                });
+            })
+            .catch(error => {
+                console.error('Error fetching existing targets:', error);
+            });
+    }
+    
+    // Call when date context changes
+    if (window.targetDateContext) {
+        const dateInputs = document.querySelectorAll('.date-range-start, .date-range-end');
+        dateInputs.forEach(input => {
+            input.addEventListener('change', populateExistingTargets);
+        });
+        
+        document.querySelector('.fy-select').addEventListener('change', populateExistingTargets);
+        document.querySelector('.month-select').addEventListener('change', populateExistingTargets);
+    }
+});
+</script>
+{% endblock %} 
