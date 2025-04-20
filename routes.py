@@ -61,113 +61,37 @@ def logout():
 @app.route('/dashboard', methods=['GET'])
 @login_required
 def dashboard():
-    # Set default period if none selected
-    period_type = request.args.get('period_type', 'Weekly')
-    
-    # Get current dates for default selections
+    # Get current date for default values
     today = datetime.now()
-    current_week_start = (today - timedelta(days=today.weekday())).strftime('%Y-%m-%d')
-    current_week_end = (today + timedelta(days=6-today.weekday())).strftime('%Y-%m-%d')
-    current_month = today.strftime('%b-%Y')
-    current_quarter = f"Q{((today.month - 1) // 3) + 1}-{today.year}"
-    current_year = str(today.year)
     
     # Get financial year data
     current_fin_year = get_financial_year(today)
-    current_fin_quarter = get_financial_quarter(today)
-    current_fin_month = get_financial_month(today)
+    current_month = today.strftime('%b')  # Current month name (short form)
     
-    # Default period identifier based on period type
-    if period_type == 'Weekly':
-        week_num = int(today.strftime('%W')) + 1  # Week number (1-52)
-        default_period = f"{current_week_start} to {current_week_end}"
-    elif period_type == 'Monthly':
-        default_period = current_fin_month
-    elif period_type == 'Quarterly':
-        default_period = current_fin_quarter
-    elif period_type == 'Yearly':
-        default_period = current_fin_year
-    else:
-        default_period = current_year
-    
-    period_identifier = request.args.get('period_identifier', default_period)
+    # Get selected filters from request or use defaults
+    selected_financial_year = request.args.get('financial_year', current_fin_year)
+    selected_month = request.args.get('month', current_month)
     distributor_id = request.args.get('distributor_id')
     
     # Get all distributors for the dropdown
     distributors = Distributor.query.all()
     
-    # Generate period options for dropdowns
-    if period_type == 'Weekly':
-        # Get all weekly targets
-        weekly_targets = Target.query.filter_by(period_type='Weekly').all()
-        period_options = {
-            'Weekly': []
-        }
-        
-        # Use date ranges from targets
-        for target in weekly_targets:
-            if target.week_start_date and target.week_end_date:
-                date_range = f"{target.week_start_date} to {target.week_end_date}"
-                if date_range not in period_options['Weekly']:
-                    period_options['Weekly'].append(date_range)
-        
-        # If no targets with dates found, use current week
-        if not period_options['Weekly']:
-            period_options['Weekly'] = [f"{current_week_start} to {current_week_end}"]
-    else:
-        # Get list of financial years from 2020 to 2035
-        all_fin_years = get_all_financial_years(2020, 2035)
-        
-        # Generate all financial quarters
-        all_fin_quarters = []
-        for fy in all_fin_years:
-            for q in range(1, 5):
-                all_fin_quarters.append(f"Q{q}-{fy}")
-        
-        # Generate all financial months
-        all_fin_months = []
-        month_names = ['Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec', 'Jan', 'Feb', 'Mar']
-        for fy in all_fin_years:
-            for m in month_names:
-                all_fin_months.append(f"{m}-{fy}")
-        
-        period_options = {
-            'Weekly': [f"Wk {w}-{today.year}" for w in range(1, 53)],
-            'Monthly': all_fin_months,
-            'Quarterly': all_fin_quarters,
-            'Yearly': all_fin_years
-        }
+    # Get all financial years
+    financial_years = get_all_financial_years(2020, 2035)
     
-    # Get lookup period identifier for database query
-    lookup_period_identifier = period_identifier
-    if period_type == 'Weekly' and ' to ' in period_identifier:
-        # Find target with these dates
-        start_date, end_date = period_identifier.split(' to ')
-        target = Target.query.filter_by(
-            period_type='Weekly',
-            week_start_date=start_date,
-            week_end_date=end_date
-        ).first()
-        
-        if target:
-            lookup_period_identifier = target.period_identifier
-        else:
-            # Find the week number for this date range
-            try:
-                start_dt = datetime.strptime(start_date, '%Y-%m-%d')
-                week_num = int(start_dt.strftime('%W')) + 1
-                year = start_dt.year
-                lookup_period_identifier = f"Wk {week_num}-{year}"
-            except:
-                pass
+    # Get all months
+    months = ['Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec', 'Jan', 'Feb', 'Mar']
     
-    # Get performance data
-    overall_data = generate_performance_data(None, period_type, lookup_period_identifier, db, Actual, Target)
+    # Generate the period identifier for performance data query (e.g., "Apr-FY24-25")
+    period_identifier = f"{selected_month}-{selected_financial_year}"
+    
+    # Get performance data using the period identifier
+    overall_data = generate_performance_data(None, 'Monthly', period_identifier, db, Actual, Target)
     
     # Get distributor-specific performance data
     distributor_performance = []
     for distributor in distributors:
-        perf_data = generate_performance_data(distributor.id, period_type, lookup_period_identifier, db, Actual, Target)
+        perf_data = generate_performance_data(distributor.id, 'Monthly', period_identifier, db, Actual, Target)
         distributor_performance.append({
             'id': distributor.id,
             'name': distributor.name,
@@ -180,10 +104,11 @@ def dashboard():
     return render_template(
         'dashboard.html',
         distributors=distributors,
-        period_type=period_type,
-        period_identifier=period_identifier,
+        financial_years=financial_years,
+        months=months,
+        selected_financial_year=selected_financial_year,
+        selected_month=selected_month,
         selected_distributor_id=distributor_id,
-        period_options=period_options,
         overall_data=overall_data,
         distributor_performance=distributor_performance
     )
@@ -290,63 +215,36 @@ def new_target():
     
     if request.method == 'POST':
         distributor_id = request.form.get('distributor_id')
-        period_type = request.form.get('period_type')
-        period_identifier = request.form.get('period_identifier', '')
+        financial_year = request.form.get('financial_year')
+        month = request.form.get('month')
         target_value = request.form.get('target_value')
-        week_start_date = request.form.get('week_start_date', '')
-        week_end_date = request.form.get('week_end_date', '')
         
-        # For Weekly periods, we now use custom dates
-        if period_type == 'Weekly':
-            # Validate weekly dates are provided
-            if not all([distributor_id, period_type, target_value, week_start_date, week_end_date]):
-                flash('Distributor, period type, start date, end date, and target value are required', 'danger')
-                return render_template('target_form.html', distributors=distributors)
-                
-            # Generate a period identifier based on the start date
-            start_date = datetime.strptime(week_start_date, '%Y-%m-%d')
-            week_num = int(start_date.strftime('%W')) + 1  # Week number (1-52)
-            period_identifier = f"Wk {week_num}-{start_date.year}"
-        else:
-            # For non-weekly periods, validate as before
-            if not all([distributor_id, period_type, period_identifier, target_value]):
-                flash('All fields are required', 'danger')
-                return render_template('target_form.html', distributors=distributors)
+        # Validate required fields
+        if not all([distributor_id, financial_year, month, target_value]):
+            flash('All fields are required', 'danger')
+            return render_template('target_form.html', distributors=distributors, financial_years=get_all_financial_years(2020, 2035))
         
         try:
-            # Check for duplicate targets
-            existing_query = Target.query.filter_by(
-                distributor_id=distributor_id,
-                period_type=period_type
-            )
+            # Create period identifier for database (e.g., "Apr-FY24-25")
+            period_identifier = f"{month}-{financial_year}"
             
-            if period_type == 'Weekly':
-                # For weekly, check for overlapping dates
-                existing = existing_query.filter(
-                    ((Target.week_start_date <= week_start_date) & (Target.week_end_date >= week_start_date)) | 
-                    ((Target.week_start_date <= week_end_date) & (Target.week_end_date >= week_end_date)) |
-                    ((Target.week_start_date >= week_start_date) & (Target.week_end_date <= week_end_date))
-                ).first()
-                
-                if existing:
-                    flash('Target already exists for this date range. Please select a different week.', 'danger')
-                    return render_template('target_form.html', distributors=distributors)
-            else:
-                # For non-weekly, check by period identifier
-                existing = existing_query.filter_by(period_identifier=period_identifier).first()
-                
-                if existing:
-                    flash('Target already set for this distributor/period.', 'danger')
-                    return render_template('target_form.html', distributors=distributors)
+            # Check for duplicate targets
+            existing = Target.query.filter_by(
+                distributor_id=distributor_id,
+                period_type='Monthly',
+                period_identifier=period_identifier
+            ).first()
+            
+            if existing:
+                flash('Target already set for this distributor/period.', 'danger')
+                return render_template('target_form.html', distributors=distributors, financial_years=get_all_financial_years(2020, 2035))
             
             # Create new target
             target = Target(
                 distributor_id=distributor_id,
-                period_type=period_type,
+                period_type='Monthly',
                 period_identifier=period_identifier,
-                target_value=float(target_value),
-                week_start_date=week_start_date if period_type == 'Weekly' else None,
-                week_end_date=week_end_date if period_type == 'Weekly' else None
+                target_value=float(target_value)
             )
             
             db.session.add(target)
@@ -358,38 +256,10 @@ def new_target():
             db.session.rollback()
             flash(f'Error creating target: {str(e)}', 'danger')
     
-    # Generate period options
-    today = datetime.now()
+    # Get all financial years
+    financial_years = get_all_financial_years(2020, 2035)
     
-    # Get list of financial years from 2020 to 2035
-    all_fin_years = get_all_financial_years(2020, 2035)
-    
-    # Generate all financial quarters
-    all_fin_quarters = []
-    for fy in all_fin_years:
-        for q in range(1, 5):
-            all_fin_quarters.append(f"Q{q}-{fy}")
-    
-    # Generate all financial months
-    all_fin_months = []
-    month_names = ['Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec', 'Jan', 'Feb', 'Mar']
-    for fy in all_fin_years:
-        for m in month_names:
-            all_fin_months.append(f"{m}-{fy}")
-    
-    period_options = {
-        'Weekly': [f"Wk {w}-{today.year}" for w in range(1, 53)],
-        'Monthly': all_fin_months,
-        'Quarterly': all_fin_quarters,
-        'Yearly': all_fin_years
-    }
-    
-    # Get current week dates for default values
-    current_week_start = get_current_week_start()
-    current_week_end = get_current_week_end()
-    
-    return render_template('target_form.html', distributors=distributors, period_options=period_options,
-                           current_week_start=current_week_start, current_week_end=current_week_end)
+    return render_template('target_form.html', distributors=distributors, financial_years=financial_years)
 
 @app.route('/targets/<int:id>/edit', methods=['GET', 'POST'])
 @login_required
@@ -399,62 +269,35 @@ def edit_target(id):
     
     if request.method == 'POST':
         distributor_id = request.form.get('distributor_id')
-        period_type = request.form.get('period_type')
-        period_identifier = request.form.get('period_identifier', '')
+        financial_year = request.form.get('financial_year')
+        month = request.form.get('month')
         target_value = request.form.get('target_value')
-        week_start_date = request.form.get('week_start_date', '')
-        week_end_date = request.form.get('week_end_date', '')
         
-        # For Weekly periods, we now use custom dates
-        if period_type == 'Weekly':
-            # Validate weekly dates are provided
-            if not all([distributor_id, period_type, target_value, week_start_date, week_end_date]):
-                flash('Distributor, period type, start date, end date, and target value are required', 'danger')
-                return render_template('target_form.html', target=target, distributors=distributors)
-                
-            # Generate a period identifier based on the start date
-            start_date = datetime.strptime(week_start_date, '%Y-%m-%d')
-            week_num = int(start_date.strftime('%W')) + 1  # Week number (1-52)
-            period_identifier = f"Wk {week_num}-{start_date.year}"
-        else:
-            # For non-weekly periods, validate as before
-            if not all([distributor_id, period_type, period_identifier, target_value]):
-                flash('All fields are required', 'danger')
-                return render_template('target_form.html', target=target, distributors=distributors)
+        # Validate required fields
+        if not all([distributor_id, financial_year, month, target_value]):
+            flash('All fields are required', 'danger')
+            return render_template('target_form.html', target=target, distributors=distributors, financial_years=get_all_financial_years(2020, 2035))
         
         try:
-            # Check for duplicate targets (excluding current)
-            existing_query = Target.query.filter_by(
-                distributor_id=distributor_id,
-                period_type=period_type
-            ).filter(Target.id != id)
+            # Create period identifier for database (e.g., "Apr-FY24-25")
+            period_identifier = f"{month}-{financial_year}"
             
-            if period_type == 'Weekly':
-                # For weekly, check for overlapping dates
-                existing = existing_query.filter(
-                    ((Target.week_start_date <= week_start_date) & (Target.week_end_date >= week_start_date)) | 
-                    ((Target.week_start_date <= week_end_date) & (Target.week_end_date >= week_end_date)) |
-                    ((Target.week_start_date >= week_start_date) & (Target.week_end_date <= week_end_date))
-                ).first()
-                
-                if existing:
-                    flash('Target already exists for this date range. Please select a different week.', 'danger')
-                    return render_template('target_form.html', target=target, distributors=distributors)
-            else:
-                # For non-weekly, check by period identifier
-                existing = existing_query.filter_by(period_identifier=period_identifier).first()
-                
-                if existing:
-                    flash('Target already set for this distributor/period.', 'danger')
-                    return render_template('target_form.html', target=target, distributors=distributors)
+            # Check for duplicate targets (excluding current)
+            existing = Target.query.filter_by(
+                distributor_id=distributor_id,
+                period_type='Monthly',
+                period_identifier=period_identifier
+            ).filter(Target.id != id).first()
+            
+            if existing:
+                flash('Target already set for this distributor/period.', 'danger')
+                return render_template('target_form.html', target=target, distributors=distributors, financial_years=get_all_financial_years(2020, 2035))
             
             # Update target
             target.distributor_id = distributor_id
-            target.period_type = period_type
+            target.period_type = 'Monthly'
             target.period_identifier = period_identifier
             target.target_value = float(target_value)
-            target.week_start_date = week_start_date if period_type == 'Weekly' else None
-            target.week_end_date = week_end_date if period_type == 'Weekly' else None
             
             db.session.commit()
             flash('Target updated successfully!', 'success')
@@ -464,38 +307,10 @@ def edit_target(id):
             db.session.rollback()
             flash(f'Error updating target: {str(e)}', 'danger')
     
-    # Generate period options
-    today = datetime.now()
+    # Get all financial years
+    financial_years = get_all_financial_years(2020, 2035)
     
-    # Get list of financial years from 2020 to 2035
-    all_fin_years = get_all_financial_years(2020, 2035)
-    
-    # Generate all financial quarters
-    all_fin_quarters = []
-    for fy in all_fin_years:
-        for q in range(1, 5):
-            all_fin_quarters.append(f"Q{q}-{fy}")
-    
-    # Generate all financial months
-    all_fin_months = []
-    month_names = ['Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec', 'Jan', 'Feb', 'Mar']
-    for fy in all_fin_years:
-        for m in month_names:
-            all_fin_months.append(f"{m}-{fy}")
-    
-    period_options = {
-        'Weekly': [f"Wk {w}-{today.year}" for w in range(1, 53)],
-        'Monthly': all_fin_months,
-        'Quarterly': all_fin_quarters,
-        'Yearly': all_fin_years
-    }
-    
-    # Get current week dates for default values
-    current_week_start = get_current_week_start()
-    current_week_end = get_current_week_end()
-    
-    return render_template('target_form.html', target=target, distributors=distributors, period_options=period_options,
-                          current_week_start=current_week_start, current_week_end=current_week_end)
+    return render_template('target_form.html', target=target, distributors=distributors, financial_years=financial_years)
 
 @app.route('/targets/<int:id>/delete', methods=['POST'])
 @login_required
@@ -650,133 +465,76 @@ def delete_actual(id):
 @app.route('/reports')
 @login_required
 def reports():
-    distributors = Distributor.query.all()
-    
-    # Default to current period
+    # Get current date for default values
     today = datetime.now()
-    period_type = request.args.get('period_type', 'Monthly')
     
-    if period_type == 'Weekly':
-        # Use date format instead of week number
-        current_week_start = (today - timedelta(days=today.weekday())).strftime('%Y-%m-%d')
-        current_week_end = (today + timedelta(days=6-today.weekday())).strftime('%Y-%m-%d')
-        default_period = f"{current_week_start} to {current_week_end}"
-        
-        # Try to find a target with these dates
-        target = Target.query.filter_by(
-            period_type='Weekly',
-            week_start_date=current_week_start,
-            week_end_date=current_week_end
-        ).first()
-        
-        if target:
-            default_period = f"{target.week_start_date} to {target.week_end_date}"
-    elif period_type == 'Monthly':
-        default_period = today.strftime('%b-%Y')
-    elif period_type == 'Quarterly':
-        default_period = f"Q{((today.month - 1) // 3) + 1}-{today.year}"
-    else:
-        default_period = str(today.year)
+    # Get financial year data
+    current_fin_year = get_financial_year(today)
+    current_month = today.strftime('%b')  # Current month name (short form)
     
-    period_identifier = request.args.get('period_identifier', default_period)
+    # Get selected filters from request or use defaults
+    selected_financial_year = request.args.get('financial_year', current_fin_year)
+    selected_month = request.args.get('month', current_month)
     distributor_id = request.args.get('distributor_id')
     
-    # Generate period options for dropdowns
-    if period_type == 'Weekly':
-        # Get all weekly targets
-        weekly_targets = Target.query.filter_by(period_type='Weekly').all()
-        period_options = {
-            'Weekly': []
-        }
-        
-        # Use date ranges from targets
-        for target in weekly_targets:
-            if target.week_start_date and target.week_end_date:
-                date_range = f"{target.week_start_date} to {target.week_end_date}"
-                if date_range not in period_options['Weekly']:
-                    period_options['Weekly'].append(date_range)
-        
-        # If no targets with dates found, use current week
-        if not period_options['Weekly']:
-            period_options['Weekly'] = [f"{current_week_start} to {current_week_end}"]
-    else:
-        period_options = {
-            'Weekly': [],  # Will be populated by the API if needed
-            'Monthly': [f"{m}-{today.year}" for m in ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']],
-            'Quarterly': [f"Q{q}-{today.year}" for q in range(1, 5)],
-            'Yearly': [str(y) for y in range(today.year - 2, today.year + 3)]
-        }
+    # Get all distributors for the dropdown
+    distributors = Distributor.query.all()
+    
+    # Get all financial years
+    financial_years = get_all_financial_years(2020, 2035)
+    
+    # Get all months
+    months = ['Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec', 'Jan', 'Feb', 'Mar']
     
     return render_template(
         'reports.html',
         distributors=distributors,
-        period_type=period_type,
-        period_identifier=period_identifier,
-        selected_distributor_id=distributor_id,
-        period_options=period_options
+        financial_years=financial_years,
+        months=months,
+        selected_financial_year=selected_financial_year,
+        selected_month=selected_month,
+        selected_distributor_id=distributor_id
     )
 
 @app.route('/generate_report/<report_type>', methods=['POST'])
 @login_required
 def generate_report(report_type):
     distributor_id = request.form.get('distributor_id')
-    period_type = request.form.get('period_type')
-    period_identifier = request.form.get('period_identifier')
+    financial_year = request.form.get('financial_year')
+    month = request.form.get('month')
     
-    if not all([distributor_id, period_type, period_identifier]):
+    if not all([distributor_id, financial_year, month]):
         flash('All fields are required', 'danger')
         return redirect(url_for('reports'))
     
     # Get distributor
     distributor = Distributor.query.get_or_404(distributor_id)
     
-    # Convert date range to period identifier for database query if needed
-    lookup_period_identifier = period_identifier
-    if period_type == 'Weekly' and ' to ' in period_identifier:
-        # Extract dates from the format "YYYY-MM-DD to YYYY-MM-DD"
-        dates = period_identifier.split(' to ')
-        if len(dates) == 2:
-            # Find the target with these dates
-            target = Target.query.filter_by(
-                period_type='Weekly', 
-                week_start_date=dates[0], 
-                week_end_date=dates[1]
-            ).first()
-            
-            if target:
-                lookup_period_identifier = target.period_identifier
-            else:
-                # Try to calculate the week number
-                try:
-                    start_dt = datetime.strptime(dates[0], '%Y-%m-%d')
-                    week_num = int(start_dt.strftime('%W')) + 1
-                    year = start_dt.year
-                    lookup_period_identifier = f"Wk {week_num}-{year}"
-                except:
-                    pass
+    # Create period identifier for database query (e.g., "Apr-FY24-25")
+    period_identifier = f"{month}-{financial_year}"
     
     # Get performance data
-    performance_data = generate_performance_data(distributor.id, period_type, lookup_period_identifier, db, Actual, Target)
+    performance_data = generate_performance_data(distributor.id, 'Monthly', period_identifier, db, Actual, Target)
     
     # Generate report
     if report_type == 'pdf':
-        pdf_data = generate_pdf_report(distributor.name, period_type, period_identifier, performance_data)
+        pdf_data = generate_pdf_report(distributor.name, 'Monthly', period_identifier, performance_data)
         
         return send_file(
             io.BytesIO(pdf_data),
             mimetype='application/pdf',
             as_attachment=True,
-            download_name=f"{distributor.name}_Report_{period_identifier}.pdf"
+            download_name=f"{distributor.name}_Report_{month}_{financial_year}.pdf"
         )
     
     elif report_type == 'excel':
-        excel_data = generate_excel_report(distributor.name, period_type, period_identifier, performance_data)
+        excel_data = generate_excel_report(distributor.name, 'Monthly', period_identifier, performance_data)
         
         return send_file(
             io.BytesIO(excel_data),
             mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
             as_attachment=True,
-            download_name=f"{distributor.name}_Report_{period_identifier}.xlsx"
+            download_name=f"{distributor.name}_Report_{month}_{financial_year}.xlsx"
         )
     
     flash('Invalid report type', 'danger')
@@ -786,52 +544,30 @@ def generate_report(report_type):
 @login_required
 def send_email_report_route():
     distributor_id = request.form.get('distributor_id')
-    period_type = request.form.get('period_type')
-    period_identifier = request.form.get('period_identifier')
+    financial_year = request.form.get('financial_year')
+    month = request.form.get('month')
     email = request.form.get('email')
     
-    if not all([distributor_id, period_type, period_identifier, email]):
+    if not all([distributor_id, financial_year, month, email]):
         flash('All fields are required', 'danger')
         return redirect(url_for('reports'))
     
     # Get distributor
     distributor = Distributor.query.get_or_404(distributor_id)
     
-    # Convert date range to period identifier for database query if needed
-    lookup_period_identifier = period_identifier
-    if period_type == 'Weekly' and ' to ' in period_identifier:
-        # Extract dates from the format "YYYY-MM-DD to YYYY-MM-DD"
-        dates = period_identifier.split(' to ')
-        if len(dates) == 2:
-            # Find the target with these dates
-            target = Target.query.filter_by(
-                period_type='Weekly', 
-                week_start_date=dates[0], 
-                week_end_date=dates[1]
-            ).first()
-            
-            if target:
-                lookup_period_identifier = target.period_identifier
-            else:
-                # Try to calculate the week number
-                try:
-                    start_dt = datetime.strptime(dates[0], '%Y-%m-%d')
-                    week_num = int(start_dt.strftime('%W')) + 1
-                    year = start_dt.year
-                    lookup_period_identifier = f"Wk {week_num}-{year}"
-                except:
-                    pass
+    # Create period identifier for database query (e.g., "Apr-FY24-25")
+    period_identifier = f"{month}-{financial_year}"
     
     # Get performance data
-    performance_data = generate_performance_data(distributor.id, period_type, lookup_period_identifier, db, Actual, Target)
+    performance_data = generate_performance_data(distributor.id, 'Monthly', period_identifier, db, Actual, Target)
     
     # Generate reports
-    pdf_data = generate_pdf_report(distributor.name, period_type, period_identifier, performance_data)
-    excel_data = generate_excel_report(distributor.name, period_type, period_identifier, performance_data)
+    pdf_data = generate_pdf_report(distributor.name, 'Monthly', period_identifier, performance_data)
+    excel_data = generate_excel_report(distributor.name, 'Monthly', period_identifier, performance_data)
     
     try:
         # Send email with reports
-        send_email_report(email, distributor.name, period_type, period_identifier, pdf_data, excel_data)
+        send_email_report(email, distributor.name, 'Monthly', period_identifier, pdf_data, excel_data)
         flash('Reports sent successfully!', 'success')
     except Exception as e:
         flash(f'Error sending email: {str(e)}', 'danger')
@@ -841,11 +577,11 @@ def send_email_report_route():
 @app.route('/bulk_export_reports', methods=['POST'])
 @login_required
 def bulk_export_reports():
-    period_type = request.form.get('period_type')
-    period_identifier = request.form.get('period_identifier')
+    financial_year = request.form.get('financial_year')
+    month = request.form.get('month')
     
-    if not all([period_type, period_identifier]):
-        flash('Period type and period are required', 'danger')
+    if not all([financial_year, month]):
+        flash('Financial year and month are required', 'danger')
         return redirect(url_for('reports'))
     
     # Get all distributors
@@ -855,55 +591,35 @@ def bulk_export_reports():
         flash('No distributors found', 'warning')
         return redirect(url_for('reports'))
     
+    # Create period identifier for database query (e.g., "Apr-FY24-25")
+    period_identifier = f"{month}-{financial_year}"
+    
     # Create a ZIP file with reports for all distributors
     memory_file = io.BytesIO()
     with zipfile.ZipFile(memory_file, 'w') as zf:
         for distributor in distributors:
-            # Convert date range to period identifier for database query if needed
-            lookup_period_identifier = period_identifier
-            if period_type == 'Weekly' and ' to ' in period_identifier:
-                # Extract dates from the format "YYYY-MM-DD to YYYY-MM-DD"
-                dates = period_identifier.split(' to ')
-                if len(dates) == 2:
-                    # Find the target with these dates
-                    target = Target.query.filter_by(
-                        period_type='Weekly', 
-                        week_start_date=dates[0], 
-                        week_end_date=dates[1]
-                    ).first()
-                    
-                    if target:
-                        lookup_period_identifier = target.period_identifier
-                    else:
-                        # Try to calculate the week number
-                        try:
-                            start_dt = datetime.strptime(dates[0], '%Y-%m-%d')
-                            week_num = int(start_dt.strftime('%W')) + 1
-                            year = start_dt.year
-                            lookup_period_identifier = f"Wk {week_num}-{year}"
-                        except:
-                            pass
-            
             # Get performance data
-            performance_data = generate_performance_data(distributor.id, period_type, lookup_period_identifier, db, Actual, Target)
+            performance_data = generate_performance_data(distributor.id, 'Monthly', period_identifier, db, Actual, Target)
             
             # Generate PDF report
-            pdf_data = generate_pdf_report(distributor.name, period_type, period_identifier, performance_data)
-            pdf_filename = f"{distributor.name}_Report_{period_identifier}.pdf"
+            pdf_data = generate_pdf_report(distributor.name, 'Monthly', period_identifier, performance_data)
+            pdf_filename = f"{distributor.name}_Report_{month}_{financial_year}.pdf"
             zf.writestr(pdf_filename, pdf_data)
             
             # Generate Excel report
-            excel_data = generate_excel_report(distributor.name, period_type, period_identifier, performance_data)
-            excel_filename = f"{distributor.name}_Report_{period_identifier}.xlsx"
+            excel_data = generate_excel_report(distributor.name, 'Monthly', period_identifier, performance_data)
+            excel_filename = f"{distributor.name}_Report_{month}_{financial_year}.xlsx"
             zf.writestr(excel_filename, excel_data)
     
+    # Reset file pointer
     memory_file.seek(0)
-    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+    
+    # Send the ZIP file
     return send_file(
         memory_file,
         mimetype='application/zip',
         as_attachment=True,
-        download_name=f"All_Distributors_Reports_{period_type}_{period_identifier}_{timestamp}.zip"
+        download_name=f"All_Distributors_Reports_{month}_{financial_year}.zip"
     )
 
 # AJAX Routes
@@ -912,24 +628,7 @@ def bulk_export_reports():
 def get_periods(period_type):
     today = datetime.now()
     
-    if period_type == 'Weekly':
-        # Get all weekly targets
-        weekly_targets = Target.query.filter_by(period_type='Weekly').all()
-        
-        # Extract date ranges from targets
-        periods = []
-        for target in weekly_targets:
-            if target.week_start_date and target.week_end_date:
-                date_range = f"{target.week_start_date} to {target.week_end_date}"
-                if date_range not in periods:
-                    periods.append(date_range)
-        
-        # If no targets with dates found, use current week
-        if not periods:
-            current_week_start = (today - timedelta(days=today.weekday())).strftime('%Y-%m-%d')
-            current_week_end = (today + timedelta(days=6-today.weekday())).strftime('%Y-%m-%d')
-            periods = [f"{current_week_start} to {current_week_end}"]
-    elif period_type == 'Monthly':
+    if period_type == 'Monthly':
         # Get list of financial years from 2020 to 2035
         all_fin_years = get_all_financial_years(2020, 2035)
         
@@ -1032,10 +731,10 @@ def backup_page():
 @login_required
 def send_to_distributor():
     distributor_id = request.form.get('distributor_id')
-    period_type = request.form.get('period_type')
-    period_identifier = request.form.get('period_identifier')
+    financial_year = request.form.get('financial_year')
+    month = request.form.get('month')
     
-    if not all([distributor_id, period_type, period_identifier]):
+    if not all([distributor_id, financial_year, month]):
         flash('All fields are required', 'danger')
         return redirect(url_for('reports'))
     
@@ -1047,43 +746,27 @@ def send_to_distributor():
         flash('Selected distributor does not have an email address', 'danger')
         return redirect(url_for('reports'))
     
-    # Convert date range to period identifier for database query if needed
-    lookup_period_identifier = period_identifier
-    if period_type == 'Weekly' and ' to ' in period_identifier:
-        # Extract dates from the format "YYYY-MM-DD to YYYY-MM-DD"
-        dates = period_identifier.split(' to ')
-        if len(dates) == 2:
-            # Find the target with these dates
-            target = Target.query.filter_by(
-                period_type='Weekly', 
-                week_start_date=dates[0], 
-                week_end_date=dates[1]
-            ).first()
-            
-            if target:
-                lookup_period_identifier = target.period_identifier
-            else:
-                # Try to calculate the week number
-                try:
-                    start_dt = datetime.strptime(dates[0], '%Y-%m-%d')
-                    week_num = int(start_dt.strftime('%W')) + 1
-                    year = start_dt.year
-                    lookup_period_identifier = f"Wk {week_num}-{year}"
-                except:
-                    pass
+    # Create period identifier for database query (e.g., "Apr-FY24-25")
+    period_identifier = f"{month}-{financial_year}"
     
     # Get performance data
-    performance_data = generate_performance_data(distributor.id, period_type, lookup_period_identifier, db, Actual, Target)
+    performance_data = generate_performance_data(distributor.id, 'Monthly', period_identifier, db, Actual, Target)
     
     # Generate reports
-    pdf_data = generate_pdf_report(distributor.name, period_type, period_identifier, performance_data)
-    excel_data = generate_excel_report(distributor.name, period_type, period_identifier, performance_data)
+    pdf_data = generate_pdf_report(distributor.name, 'Monthly', period_identifier, performance_data)
+    excel_data = generate_excel_report(distributor.name, 'Monthly', period_identifier, performance_data)
     
     try:
         # Send email with reports to distributor's email
-        send_email_report(distributor.email, distributor.name, period_type, period_identifier, pdf_data, excel_data)
+        send_email_report(distributor.email, distributor.name, 'Monthly', period_identifier, pdf_data, excel_data)
         flash(f'Reports sent successfully to {distributor.name} ({distributor.email})!', 'success')
     except Exception as e:
         flash(f'Error sending email: {str(e)}', 'danger')
     
     return redirect(url_for('reports'))
+
+@app.route('/api/months/<financial_year>')
+@login_required
+def get_months(financial_year):
+    month_names = ['Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec', 'Jan', 'Feb', 'Mar']
+    return jsonify(month_names)

@@ -8,36 +8,10 @@
                 <h5 class="mb-0"><i class="fas fa-chart-line me-2"></i>Performance Dashboard</h5>
             </div>
             <div class="card-body">
-                <form method="GET" action="{{ url_for('dashboard') }}" id="filterForm">
-                    <div class="row g-3 align-items-center mb-4">
-                        <div class="col-md-3">
-                            <label for="period_type" class="form-label">Period Type</label>
-                            <select class="form-select" id="period_type" name="period_type" onchange="updatePeriodOptions(); this.form.submit();">
-                                <option value="Weekly" {% if period_type == 'Weekly' %}selected{% endif %}>Weekly</option>
-                                <option value="Monthly" {% if period_type == 'Monthly' %}selected{% endif %}>Monthly</option>
-                                <option value="Quarterly" {% if period_type == 'Quarterly' %}selected{% endif %}>Quarterly</option>
-                                <option value="Yearly" {% if period_type == 'Yearly' %}selected{% endif %}>Yearly</option>
-                            </select>
-                        </div>
-                        <div class="col-md-3">
-                            <label for="period_identifier" class="form-label">Period</label>
-                            <select class="form-select" id="period_identifier" name="period_identifier" onchange="this.form.submit();">
-                                {% for period in period_options[period_type] %}
-                                    <option value="{{ period }}" {% if period == period_identifier %}selected{% endif %}>{{ period }}</option>
-                                {% endfor %}
-                            </select>
-                        </div>
-                        <div class="col-md-3">
-                            <label for="distributor_id" class="form-label">Distributor (Optional)</label>
-                            <select class="form-select" id="distributor_id" name="distributor_id" onchange="this.form.submit();">
-                                <option value="">All Distributors</option>
-                                {% for distributor in distributors %}
-                                    <option value="{{ distributor.id }}" {% if selected_distributor_id|int == distributor.id %}selected{% endif %}>{{ distributor.name }}</option>
-                                {% endfor %}
-                            </select>
-                        </div>
-                    </div>
-                </form>
+                <!-- Include the filter component -->
+                {% with filter_action=url_for('dashboard') %}
+                    {% include 'filter_component.html' %}
+                {% endwith %}
                 
                 <div class="row mb-4">
                     <div class="col-md-4">

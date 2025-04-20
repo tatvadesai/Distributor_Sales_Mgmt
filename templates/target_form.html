@@ -27,44 +27,24 @@
                     
                     <div class="row">
                         <div class="col-md-6 mb-3">
-                            <label for="period_type" class="form-label">Period Type <span class="text-danger">*</span></label>
-                            <select class="form-select" id="period_type" name="period_type" required onchange="updatePeriodOptions(); toggleDateInputs();">
-                                <option value="">Select Period Type</option>
-                                <option value="Weekly" {% if target and target.period_type == 'Weekly' %}selected{% endif %}>Weekly</option>
-                                <option value="Monthly" {% if target and target.period_type == 'Monthly' %}selected{% endif %}>Monthly</option>
-                                <option value="Quarterly" {% if target and target.period_type == 'Quarterly' %}selected{% endif %}>Quarterly</option>
-                                <option value="Yearly" {% if target and target.period_type == 'Yearly' %}selected{% endif %}>Yearly</option>
+                            <label for="financial_year" class="form-label">Financial Year <span class="text-danger">*</span></label>
+                            <select class="form-select" id="financial_year" name="financial_year" required onchange="updateMonthOptions();">
+                                <option value="">Select Financial Year</option>
+                                {% for year in financial_years %}
+                                    <option value="{{ year }}" {% if target and target.period_identifier and year in target.period_identifier %}selected{% endif %}>{{ year }}</option>
+                                {% endfor %}
                             </select>
                         </div>
                         
-                        <div class="col-md-6 mb-3" id="period_identifier_container">
-                            <label for="period_identifier" class="form-label">Period <span class="text-danger">*</span></label>
-                            <select class="form-select" id="period_identifier" name="period_identifier" required>
-                                <option value="">Select Period</option>
-                                {% if target %}
-                                    <option value="{{ target.period_identifier }}" selected>{{ target.period_identifier }}</option>
-                                {% elif period_options %}
-                                    {% for period in period_options.Weekly %}
-                                        <option value="{{ period }}">{{ period }}</option>
-                                    {% endfor %}
+                        <div class="col-md-6 mb-3">
+                            <label for="month" class="form-label">Month <span class="text-danger">*</span></label>
+                            <select class="form-select" id="month" name="month" required>
+                                <option value="">Select Month</option>
+                                {% if target and target.period_identifier %}
+                                    {% set target_parts = target.period_identifier.split('-') %}
+                                    <option value="{{ target_parts[0] }}" selected>{{ target_parts[0] }}</option>
                                 {% endif %}
                             </select>
-                        </div>
-                    </div>
-                    
-                    <!-- Custom date inputs for weekly period -->
-                    <div class="row" id="custom_date_inputs" style="display: none;">
-                        <div class="col-md-6 mb-3">
-                            <label for="week_start_date" class="form-label">Period Start Date <span class="text-danger">*</span></label>
-                            <input type="date" class="form-control" id="week_start_date" name="week_start_date" 
-                                   value="{{ target.week_start_date if target and target.week_start_date else current_week_start }}">
-                            <div class="form-text">Select the first day of the week.</div>
-                        </div>
-                        <div class="col-md-6 mb-3">
-                            <label for="week_end_date" class="form-label">Period End Date <span class="text-danger">*</span></label>
-                            <input type="date" class="form-control" id="week_end_date" name="week_end_date" 
-                                   value="{{ target.week_end_date if target and target.week_end_date else current_week_end }}">
-                            <div class="form-text">Select the last day of the week.</div>
                         </div>
                     </div>
                     
@@ -93,96 +73,30 @@
 
 {% block scripts %}
 <script>
-function updatePeriodOptions() {
-    const periodType = document.getElementById('period_type').value;
-    if (!periodType) return;
+function updateMonthOptions() {
+    const financialYear = document.getElementById('financial_year').value;
+    if (!financialYear) return;
     
-    fetch(`/api/periods/${periodType}`)
+    fetch(`/api/months/${financialYear}`)
         .then(response => response.json())
-        .then(periods => {
-            const periodSelect = document.getElementById('period_identifier');
-            periodSelect.innerHTML = '<option value="">Select Period</option>';
+        .then(months => {
+            const monthSelect = document.getElementById('month');
+            monthSelect.innerHTML = '<option value="">Select Month</option>';
             
-            periods.forEach(period => {
+            months.forEach(month => {
                 const option = document.createElement('option');
-                option.value = period;
-                option.textContent = period;
-                periodSelect.appendChild(option);
+                option.value = month;
+                option.textContent = month;
+                monthSelect.appendChild(option);
             });
         });
 }
 
-function toggleDateInputs() {
-    const periodType = document.getElementById('period_type').value;
-    const dateInputsContainer = document.getElementById('custom_date_inputs');
-    const periodIdentifierContainer = document.getElementById('period_identifier_container');
-    
-    if (periodType === 'Weekly') {
-        dateInputsContainer.style.display = 'flex';
-        
-        // Make date inputs required for weekly periods
-        document.getElementById('week_start_date').required = true;
-        document.getElementById('week_end_date').required = true;
-        
-        // Make the period identifier optional for weekly
-        document.getElementById('period_identifier').required = false;
-        periodIdentifierContainer.style.display = 'none';
-    } else {
-        dateInputsContainer.style.display = 'none';
-        
-        // Make date inputs not required for non-weekly periods
-        document.getElementById('week_start_date').required = false;
-        document.getElementById('week_end_date').required = false;
-        
-        // Make the period identifier required for non-weekly
-        document.getElementById('period_identifier').required = true;
-        periodIdentifierContainer.style.display = 'block';
-    }
-}
-
-// Initialize period options and date inputs visibility if editing
+// Initialize month options if editing
 document.addEventListener('DOMContentLoaded', function() {
-    if (document.getElementById('period_type').value) {
-        updatePeriodOptions();
-        toggleDateInputs();
+    if (document.getElementById('financial_year').value) {
+        updateMonthOptions();
     }
-    
-    const startDateInput = document.getElementById('week_start_date');
-    const endDateInput = document.getElementById('week_end_date');
-    
-    // Calculate and set the end date when start date changes
-    startDateInput.addEventListener('change', function() {
-        if (startDateInput.value) {
-            const startDate = new Date(startDateInput.value);
-            
-            // Default end date is start date + 6 days (making it a week)
-            const endDate = new Date(startDate);
-            endDate.setDate(startDate.getDate() + 6);
-            
-            // Format as YYYY-MM-DD
-            const month = String(endDate.getMonth() + 1).padStart(2, '0');
-            const day = String(endDate.getDate()).padStart(2, '0');
-            const formattedDate = `${endDate.getFullYear()}-${month}-${day}`;
-            
-            // Only update end date automatically if it's not already set
-            if (!endDateInput.value) {
-                endDateInput.value = formattedDate;
-            }
-        }
-    });
-    
-    // Validate that end date is not before start date
-    endDateInput.addEventListener('change', function() {
-        if (startDateInput.value && endDateInput.value) {
-            const startDate = new Date(startDateInput.value);
-            const endDate = new Date(endDateInput.value);
-            
-            if (endDate < startDate) {
-                alert("End date cannot be before the start date.");
-                endDateInput.value = startDateInput.value;
-            }
-        }
-    });
 });
 </script>
 {% endblock %}

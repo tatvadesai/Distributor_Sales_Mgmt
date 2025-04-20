@@ -9,61 +9,16 @@
                 <small class="text-white">Generate and send performance reports</small>
             </div>
             <div class="card-body">
-                <form id="reportForm" class="mb-4">
-                    <div class="row g-3 align-items-end">
-                        <div class="col-md-3">
-                            <label for="distributor_id" class="form-label">Distributor <span class="text-danger">*</span></label>
-                            <select class="form-select" id="distributor_id" name="distributor_id" required>
-                                <option value="">Select Distributor</option>
-                                {% for distributor in distributors %}
-                                    <option value="{{ distributor.id }}" {% if selected_distributor_id|int == distributor.id %}selected{% endif %}
-                                        data-email="{{ distributor.email }}">
-                                        {{ distributor.name }}
-                                    </option>
-                                {% endfor %}
-                            </select>
-                        </div>
-                        
-                        <div class="col-md-2">
-                            <label for="period_type" class="form-label">Report Period <span class="text-danger">*</span></label>
-                            <select class="form-select" id="period_type" name="period_type" required onchange="updatePeriodOptions()">
-                                <option value="Weekly" {% if period_type == 'Weekly' %}selected{% endif %}>Weekly</option>
-                                <option value="Monthly" {% if period_type == 'Monthly' %}selected{% endif %}>Monthly</option>
-                                <option value="Quarterly" {% if period_type == 'Quarterly' %}selected{% endif %}>Quarterly</option>
-                                <option value="Yearly" {% if period_type == 'Yearly' %}selected{% endif %}>Yearly</option>
-                            </select>
-                            <div class="form-text text-muted" id="period_type_help">Select a period for reporting</div>
-                        </div>
-                        
-                        <div class="col-md-4" id="period_container">
-                            <div id="date_range_container" {% if period_type != 'Weekly' %}style="display: none;"{% endif %}>
-                                <label for="date_range" class="form-label">Date Range <span class="text-danger">*</span></label>
-                                <div class="input-group">
-                                    <input type="text" class="form-control" id="date_range" placeholder="Select date range">
-                                    <button class="btn btn-outline-secondary" type="button" onclick="applyDateRange()">
-                                        <i class="fas fa-check"></i>
-                                    </button>
-                                </div>
-                            </div>
-                            
-                            <div id="period_select_container" {% if period_type == 'Weekly' %}style="display: none;"{% endif %}>
-                                <label for="period_identifier" class="form-label">Period <span class="text-danger">*</span></label>
-                                <select class="form-select" id="period_identifier" name="period_identifier" required>
-                                    {% for period in period_options[period_type] %}
-                                        <option value="{{ period }}" {% if period == period_identifier %}selected{% endif %}>{{ period }}</option>
-                                    {% endfor %}
-                                </select>
-                            </div>
-                            <div class="form-text text-muted" id="period_help"></div>
-                        </div>
-
-                        <div class="col-md-3">
-                            <button type="button" id="sendToDistributorBtn" class="btn btn-success" onclick="sendToDistributor()">
-                                <i class="fas fa-paper-plane me-1"></i> Send to Distributor
-                            </button>
-                        </div>
-                    </div>
-                </form>
+                <!-- Include the filter component -->
+                {% with filter_action=url_for('reports') %}
+                    {% include 'filter_component.html' %}
+                {% endwith %}
+                
+                <div class="d-flex justify-content-end mb-4">
+                    <button type="button" id="sendToDistributorBtn" class="btn btn-success" onclick="sendToDistributor()">
+                        <i class="fas fa-paper-plane me-1"></i> Send to Distributor
+                    </button>
+                </div>
                 
                 <div class="card mb-4">
                     <div class="card-header bg-light">
@@ -80,8 +35,8 @@
                                         <form action="{{ url_for('generate_report', report_type='pdf') }}" method="post" onsubmit="return validateForm(this)">
                                             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                             <input type="hidden" name="distributor_id" id="pdf_distributor_id">
-                                            <input type="hidden" name="period_type" id="pdf_period_type">
-                                            <input type="hidden" name="period_identifier" id="pdf_period_identifier">
+                                            <input type="hidden" name="financial_year" id="pdf_financial_year">
+                                            <input type="hidden" name="month" id="pdf_month">
                                             <button type="submit" class="btn btn-outline-danger">
                                                 <i class="fas fa-file-pdf me-1"></i>Download PDF
                                             </button>
@@ -99,8 +54,8 @@
                                         <form action="{{ url_for('generate_report', report_type='excel') }}" method="post" onsubmit="return validateForm(this)">
                                             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                             <input type="hidden" name="distributor_id" id="excel_distributor_id">
-                                            <input type="hidden" name="period_type" id="excel_period_type">
-                                            <input type="hidden" name="period_identifier" id="excel_period_identifier">
+                                            <input type="hidden" name="financial_year" id="excel_financial_year">
+                                            <input type="hidden" name="month" id="excel_month">
                                             <button type="submit" class="btn btn-outline-success">
                                                 <i class="fas fa-file-excel me-1"></i>Download Excel
                                             </button>
@@ -127,8 +82,8 @@
                                         <form action="{{ url_for('send_email_report_route') }}" method="post" onsubmit="return validateEmailForm(this)">
                                             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                             <input type="hidden" name="distributor_id" id="email_distributor_id">
-                                            <input type="hidden" name="period_type" id="email_period_type">
-                                            <input type="hidden" name="period_identifier" id="email_period_identifier">
+                                            <input type="hidden" name="financial_year" id="email_financial_year">
+                                            <input type="hidden" name="month" id="email_month">
                                             <div class="mb-3">
                                                 <input type="email" class="form-control" name="email" placeholder="Enter email address" required>
                                             </div>
@@ -148,8 +103,8 @@
                                         <p class="text-muted">Generate reports for all distributors at once.</p>
                                         <form action="{{ url_for('bulk_export_reports') }}" method="post">
                                             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                            <input type="hidden" name="period_type" id="bulk_period_type">
-                                            <input type="hidden" name="period_identifier" id="bulk_period_identifier">
+                                            <input type="hidden" name="financial_year" id="bulk_financial_year">
+                                            <input type="hidden" name="month" id="bulk_month">
                                             <button type="submit" class="btn btn-outline-info" onclick="return validateBulkExport()">
                                                 <i class="fas fa-file-export me-1"></i>Bulk Export
                                             </button>
@@ -169,331 +124,104 @@
 <form id="sendToDistributorForm" action="{{ url_for('send_to_distributor') }}" method="post" style="display: none;">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <input type="hidden" name="distributor_id" id="send_distributor_id">
-    <input type="hidden" name="period_type" id="send_period_type">
-    <input type="hidden" name="period_identifier" id="send_period_identifier">
+    <input type="hidden" name="financial_year" id="send_financial_year">
+    <input type="hidden" name="month" id="send_month">
 </form>
 {% endblock %}
 
 {% block scripts %}
-<!-- Add daterangepicker library -->
-<link rel="stylesheet" type="text/css" href="https://cdn.jsdelivr.net/npm/daterangepicker/daterangepicker.css" />
-<script type="text/javascript" src="https://cdn.jsdelivr.net/momentjs/latest/moment.min.js"></script>
-<script type="text/javascript" src="https://cdn.jsdelivr.net/npm/daterangepicker/daterangepicker.min.js"></script>
-
 <script>
-// Period type help text
-const periodTypeHelp = {
-    'Weekly': 'Report for a specific week (Sunday to Saturday)',
-    'Monthly': 'Report for a specific month (e.g., Apr-2025)',
-    'Quarterly': 'Report for a specific quarter (e.g., Q1-FY25-26)',
-    'Yearly': 'Report for a fiscal year (Apr-Mar)'
-};
-
-// Initialize daterangepicker
-$(document).ready(function() {
-    $('#date_range').daterangepicker({
-        opens: 'left',
-        autoApply: false,
-        locale: {
-            format: 'YYYY-MM-DD'
-        },
-        startDate: moment().startOf('week'),
-        endDate: moment().endOf('week')
-    });
-    
-    // Update help text on page load
-    updatePeriodTypeHelp();
-});
-
-function updatePeriodTypeHelp() {
-    const periodType = document.getElementById('period_type').value;
-    document.getElementById('period_type_help').innerText = periodTypeHelp[periodType] || '';
-    
-    // Show/hide date range picker based on period type
-    if (periodType === 'Weekly') {
-        document.getElementById('date_range_container').style.display = 'block';
-        document.getElementById('period_select_container').style.display = 'none';
-    } else {
-        document.getElementById('date_range_container').style.display = 'none';
-        document.getElementById('period_select_container').style.display = 'block';
-    }
-    
-    // Update period help text based on selection
-    updatePeriodHelp();
-}
-
-function updatePeriodHelp() {
-    const periodType = document.getElementById('period_type').value;
-    let helpText = '';
-    
-    if (periodType === 'Weekly') {
-        const dateRange = $('#date_range').val();
-        if (dateRange) {
-            const [start, end] = dateRange.split(' - ');
-            helpText = `Week of ${start} to ${end}`;
-        }
-    } else {
-        const periodSelect = document.getElementById('period_identifier');
-        if (periodSelect.value) {
-            if (periodType === 'Monthly') {
-                helpText = `Monthly report for ${periodSelect.value}`;
-            } else if (periodType === 'Quarterly') {
-                helpText = `Quarterly report for ${periodSelect.value}`;
-            } else if (periodType === 'Yearly') {
-                helpText = `Yearly report for ${periodSelect.value}`;
-            }
-        }
-    }
-    
-    document.getElementById('period_help').innerText = helpText;
-}
-
-function updatePeriodOptions() {
-    const periodType = document.getElementById('period_type').value;
-    
-    // Update UI based on period type
-    updatePeriodTypeHelp();
-    
-    fetch(`/api/periods/${periodType}`)
-        .then(response => response.json())
-        .then(periods => {
-            const periodSelect = document.getElementById('period_identifier');
-            periodSelect.innerHTML = '';
-            
-            periods.forEach(period => {
-                const option = document.createElement('option');
-                option.value = period;
-                option.textContent = period;
-                periodSelect.appendChild(option);
-            });
-            
-            // Update help text
-            updatePeriodHelp();
-        });
-}
-
-function applyDateRange() {
-    const dateRange = $('#date_range').val();
-    if (dateRange) {
-        const [start, end] = dateRange.split(' - ');
-        // Format as expected by the backend: "YYYY-MM-DD to YYYY-MM-DD"
-        document.getElementById('period_identifier').value = `${start} to ${end}`;
-        updatePeriodHelp();
-    }
-}
-
 function validateForm(form) {
-    const distributor_id = document.getElementById('distributor_id').value;
-    const period_type = document.getElementById('period_type').value;
-    let period_identifier;
+    // Get values from the main form
+    const distributorId = document.getElementById('distributor_id').value;
+    const financialYear = document.getElementById('financial_year').value;
+    const month = document.getElementById('month').value;
     
-    if (period_type === 'Weekly') {
-        const dateRange = $('#date_range').val();
-        if (dateRange) {
-            const [start, end] = dateRange.split(' - ');
-            period_identifier = `${start} to ${end}`;
-        } else {
-            period_identifier = '';
-        }
-    } else {
-        period_identifier = document.getElementById('period_identifier').value;
-    }
+    // Set values in the hidden form
+    form.querySelector('[name="distributor_id"]').value = distributorId;
+    form.querySelector('[name="financial_year"]').value = financialYear;
+    form.querySelector('[name="month"]').value = month;
     
-    if (!distributor_id || !period_type || !period_identifier) {
-        alert('Please select a distributor, period type, and period.');
+    // Validate required fields
+    if (!distributorId) {
+        alert('Please select a distributor');
         return false;
     }
-    
-    // Set hidden form values
-    const prefix = form.getAttribute('action').includes('pdf') ? 'pdf_' : 'excel_';
-    document.getElementById(prefix + 'distributor_id').value = distributor_id;
-    document.getElementById(prefix + 'period_type').value = period_type;
-    document.getElementById(prefix + 'period_identifier').value = period_identifier;
     
     return true;
 }
 
 function validateEmailForm(form) {
-    const distributor_id = document.getElementById('distributor_id').value;
-    const period_type = document.getElementById('period_type').value;
-    let period_identifier;
-    
-    if (period_type === 'Weekly') {
-        const dateRange = $('#date_range').val();
-        if (dateRange) {
-            const [start, end] = dateRange.split(' - ');
-            period_identifier = `${start} to ${end}`;
-        } else {
-            period_identifier = '';
-        }
-    } else {
-        period_identifier = document.getElementById('period_identifier').value;
-    }
-    
-    if (!distributor_id || !period_type || !period_identifier) {
-        alert('Please select a distributor, period type, and period.');
+    // Validate the form first
+    if (!validateForm(form)) {
         return false;
     }
     
-    // Set hidden form values
-    document.getElementById('email_distributor_id').value = distributor_id;
-    document.getElementById('email_period_type').value = period_type;
-    document.getElementById('email_period_identifier').value = period_identifier;
+    // Check email
+    const email = form.querySelector('[name="email"]').value;
+    if (!email) {
+        alert('Please enter an email address');
+        return false;
+    }
     
     return true;
 }
 
 function validateBulkExport() {
-    const period_type = document.getElementById('period_type').value;
-    let period_identifier;
+    const financialYear = document.getElementById('financial_year').value;
+    const month = document.getElementById('month').value;
     
-    if (period_type === 'Weekly') {
-        const dateRange = $('#date_range').val();
-        if (dateRange) {
-            const [start, end] = dateRange.split(' - ');
-            period_identifier = `${start} to ${end}`;
-        } else {
-            period_identifier = '';
-        }
-    } else {
-        period_identifier = document.getElementById('period_identifier').value;
-    }
-    
-    if (!period_type || !period_identifier) {
-        alert('Please select a period type and period.');
-        return false;
-    }
-    
-    // Set hidden form values
-    document.getElementById('bulk_period_type').value = period_type;
-    document.getElementById('bulk_period_identifier').value = period_identifier;
+    // Set values in the hidden form
+    document.getElementById('bulk_financial_year').value = financialYear;
+    document.getElementById('bulk_month').value = month;
     
     return true;
 }
 
 function sendToDistributor() {
-    const distributor_id = document.getElementById('distributor_id').value;
-    const period_type = document.getElementById('period_type').value;
-    let period_identifier;
+    const distributorId = document.getElementById('distributor_id').value;
+    const financialYear = document.getElementById('financial_year').value;
+    const month = document.getElementById('month').value;
     
-    if (period_type === 'Weekly') {
-        const dateRange = $('#date_range').val();
-        if (dateRange) {
-            const [start, end] = dateRange.split(' - ');
-            period_identifier = `${start} to ${end}`;
-        } else {
-            period_identifier = '';
-        }
-    } else {
-        period_identifier = document.getElementById('period_identifier').value;
+    if (!distributorId) {
+        alert('Please select a distributor');
+        return;
     }
     
-    if (!distributor_id || !period_type || !period_identifier) {
-        alert('Please select a distributor, period type, and period.');
-        return false;
-    }
+    // Set values in the hidden form
+    document.getElementById('send_distributor_id').value = distributorId;
+    document.getElementById('send_financial_year').value = financialYear;
+    document.getElementById('send_month').value = month;
     
-    // Get the distributor email
-    const distributorSelect = document.getElementById('distributor_id');
-    const selectedOption = distributorSelect.options[distributorSelect.selectedIndex];
-    const distributorEmail = selectedOption.getAttribute('data-email');
-    
-    if (!distributorEmail) {
-        alert('Selected distributor does not have an email address. Please update the distributor details first.');
-        return false;
-    }
-    
-    // Confirm sending
-    if (confirm(`Are you sure you want to send performance reports to ${selectedOption.text} (${distributorEmail})?`)) {
-        // Set form values and submit
-        document.getElementById('send_distributor_id').value = distributor_id;
-        document.getElementById('send_period_type').value = period_type;
-        document.getElementById('send_period_identifier').value = period_identifier;
-        document.getElementById('sendToDistributorForm').submit();
-    }
+    // Submit the form
+    document.getElementById('sendToDistributorForm').submit();
 }
 
-// Initialize values when page loads
+// When page loads, set initial values
 document.addEventListener('DOMContentLoaded', function() {
-    // Initialize period type help text
-    updatePeriodTypeHelp();
+    // Sync hidden form fields with selected values
+    const distributorId = document.getElementById('distributor_id').value;
+    const financialYear = document.getElementById('financial_year').value;
+    const month = document.getElementById('month').value;
     
-    // Add event listener for period type change
-    document.getElementById('period_type').addEventListener('change', updatePeriodTypeHelp);
+    // Set hidden fields for PDF form
+    document.getElementById('pdf_distributor_id').value = distributorId;
+    document.getElementById('pdf_financial_year').value = financialYear;
+    document.getElementById('pdf_month').value = month;
     
-    // Add event listener for period identifier change
-    document.getElementById('period_identifier').addEventListener('change', updatePeriodHelp);
+    // Set hidden fields for Excel form
+    document.getElementById('excel_distributor_id').value = distributorId;
+    document.getElementById('excel_financial_year').value = financialYear;
+    document.getElementById('excel_month').value = month;
     
-    // Initialize hidden form fields
-    const distributor_id = document.getElementById('distributor_id').value;
-    const period_type = document.getElementById('period_type').value;
-    let period_identifier;
+    // Set hidden fields for Email form
+    document.getElementById('email_distributor_id').value = distributorId;
+    document.getElementById('email_financial_year').value = financialYear;
+    document.getElementById('email_month').value = month;
     
-    if (period_type === 'Weekly') {
-        // Initialize date range picker with current selected value
-        const currentValue = document.getElementById('period_identifier').value;
-        if (currentValue && currentValue.includes(' to ')) {
-            const [start, end] = currentValue.split(' to ');
-            $('#date_range').data('daterangepicker').setStartDate(start);
-            $('#date_range').data('daterangepicker').setEndDate(end);
-        }
-        
-        const dateRange = $('#date_range').val();
-        if (dateRange) {
-            const [start, end] = dateRange.split(' - ');
-            period_identifier = `${start} to ${end}`;
-        } else {
-            period_identifier = document.getElementById('period_identifier').value;
-        }
-    } else {
-        period_identifier = document.getElementById('period_identifier').value;
-    }
-    
-    document.getElementById('pdf_distributor_id').value = distributor_id;
-    document.getElementById('pdf_period_type').value = period_type;
-    document.getElementById('pdf_period_identifier').value = period_identifier;
-    
-    document.getElementById('excel_distributor_id').value = distributor_id;
-    document.getElementById('excel_period_type').value = period_type;
-    document.getElementById('excel_period_identifier').value = period_identifier;
-    
-    document.getElementById('email_distributor_id').value = distributor_id;
-    document.getElementById('email_period_type').value = period_type;
-    document.getElementById('email_period_identifier').value = period_identifier;
-    
-    document.getElementById('bulk_period_type').value = period_type;
-    document.getElementById('bulk_period_identifier').value = period_identifier;
-    
-    document.getElementById('send_distributor_id').value = distributor_id;
-    document.getElementById('send_period_type').value = period_type;
-    document.getElementById('send_period_identifier').value = period_identifier;
-    
-    // Update button state
-    updateSendToDistributorButton();
-    
-    // Add event listener for distributor change
-    document.getElementById('distributor_id').addEventListener('change', updateSendToDistributorButton);
+    // Set hidden fields for Bulk Export form
+    document.getElementById('bulk_financial_year').value = financialYear;
+    document.getElementById('bulk_month').value = month;
 });
-
-function updateSendToDistributorButton() {
-    const distributorSelect = document.getElementById('distributor_id');
-    const sendButton = document.getElementById('sendToDistributorBtn');
-    
-    if (distributorSelect.value) {
-        const selectedOption = distributorSelect.options[distributorSelect.selectedIndex];
-        const distributorEmail = selectedOption.getAttribute('data-email');
-        
-        if (distributorEmail) {
-            sendButton.disabled = false;
-            sendButton.title = `Send reports to ${selectedOption.text} (${distributorEmail})`;
-        } else {
-            sendButton.disabled = true;
-            sendButton.title = 'Selected distributor does not have an email address';
-        }
-    } else {
-        sendButton.disabled = true;
-        sendButton.title = 'Please select a distributor first';
-    }
-}
 </script>
 {% endblock %}
