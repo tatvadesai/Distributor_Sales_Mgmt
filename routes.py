@@ -8,11 +8,15 @@ from werkzeug.security import check_password_hash
 from datetime import datetime, timedelta
 import io
 import logging
-from sqlalchemy import func
+from sqlalchemy import func, or_, and_
 import os
 import zipfile
+import csv
+import json
+import sqlite3
+import subprocess
 
-from app import app, db
+from app import app, db, login_manager
 from models import User, Distributor, Target, Actual
 from utils import (
     calculate_periods, get_current_week_start, get_current_week_end, 
@@ -85,57 +89,97 @@ def dashboard():
     financial_years = get_all_financial_years(2020, 2035)
     
     # Get all months
-    months = ['Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec', 'Jan', 'Feb', 'Mar']
+    months = ['All', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec', 'Jan', 'Feb', 'Mar']
     
     # If no date_range is provided, get the default one for the selected month
     if not selected_date_range:
-        # Parse the financial year to get the calendar year
-        fy_start_year = int("20" + selected_financial_year[2:4])
-        
-        # Map months to their calendar values
-        month_map = {
-            'Apr': 4, 'May': 5, 'Jun': 6, 'Jul': 7, 'Aug': 8, 'Sep': 9, 
-            'Oct': 10, 'Nov': 11, 'Dec': 12, 'Jan': 1, 'Feb': 2, 'Mar': 3
-        }
-        
-        # Determine the year for this month
-        month_num = month_map[selected_month]
-        year = fy_start_year if month_num >= 4 else fy_start_year + 1
-        
-        # Get the first day of the month
-        first_day = datetime(year, month_num, 1)
-        
-        # Find the first Monday of the month or last Monday of the previous month
-        first_week_start = first_day - timedelta(days=first_day.weekday())
-        first_week_end = first_week_start + timedelta(days=6)
-        
-        # Set the default date range
-        selected_date_range = f"{first_week_start.strftime('%d %b')} - {first_week_end.strftime('%d %b')}"
+        if selected_month == 'All':
+            # Set date range for entire financial year
+            fy_start_year = int("20" + selected_financial_year[2:4])
+            selected_date_range = f"01 Apr {fy_start_year} - 31 Mar {fy_start_year + 1}"
+        else:
+            # Parse the financial year to get the calendar year
+            fy_start_year = int("20" + selected_financial_year[2:4])
+            
+            # Map months to their calendar values
+            month_map = {
+                'Apr': 4, 'May': 5, 'Jun': 6, 'Jul': 7, 'Aug': 8, 'Sep': 9, 
+                'Oct': 10, 'Nov': 11, 'Dec': 12, 'Jan': 1, 'Feb': 2, 'Mar': 3
+            }
+            
+            # Determine the year for this month
+            month_num = month_map[selected_month]
+            year = fy_start_year if month_num >= 4 else fy_start_year + 1
+            
+            # Get the first day of the month
+            first_day = datetime(year, month_num, 1)
+            
+            # Find the first Monday of the month or last Monday of the previous month
+            first_week_start = first_day - timedelta(days=first_day.weekday())
+            first_week_end = first_week_start + timedelta(days=6)
+            
+            # Set the default date range
+            selected_date_range = f"{first_week_start.strftime('%d %b')} - {first_week_end.strftime('%d %b')}"
     
-    # Generate the period identifier for performance data query (e.g., "Apr-FY24-25")
-    period_identifier = f"{selected_month}-{selected_financial_year}"
-    
-    # Get performance data using the period identifier
-    overall_data = generate_performance_data(None, 'Monthly', period_identifier, db, Actual, Target)
-    
-    # Get distributor-specific performance data
+    # Get performance data for all distributors
     distributor_performance = []
     for distributor in distributors:
-        perf_data = generate_performance_data(distributor.id, 'Monthly', period_identifier, db, Actual, Target)
-        distributor_performance.append({
-            'id': distributor.id,
-            'name': distributor.name,
-            **perf_data
-        })
+        if selected_month == 'All':
+            # For 'All', get data for the entire financial year for each distributor
+            try:
+                date_parts = selected_date_range.split(' - ')
+                start_str = date_parts[0].split(' ')[0] + ' ' + date_parts[0].split(' ')[1] + ' ' + selected_financial_year[:2] + date_parts[0].split(' ')[2]
+                end_str = date_parts[1].split(' ')[0] + ' ' + date_parts[1].split(' ')[1] + ' ' + selected_financial_year[:2] + date_parts[1].split(' ')[2]
+                
+                targets = Target.query.filter(
+                    Target.distributor_id == distributor.id,
+                    Target.period_type == 'Monthly',
+                    Target.period_identifier.like(f"%-{selected_financial_year}")
+                ).all()
+                
+                actuals = Actual.query.filter(
+                    Actual.distributor_id == distributor.id,
+                    Actual.week_start_date >= start_str,
+                    Actual.week_end_date <= end_str
+                ).all()
+                
+                total_target = sum(t.target_value for t in targets)
+                total_actual = sum(a.actual_value for a in actuals)
+                
+                distributor_performance.append({
+                    'id': distributor.id,
+                    'name': distributor.name,
+                    'target': total_target,
+                    'actual': total_actual,
+                    'achievement_percent': (total_actual / total_target * 100) if total_target > 0 else 0
+                })
+            except Exception as e:
+                app.logger.error(f"Error calculating distributor performance for 'All' month: {str(e)}")
+        else:
+            period_identifier = f"{selected_month}-{selected_financial_year}"
+            perf_data = generate_performance_data(distributor.id, 'Monthly', period_identifier, db, Actual, Target)
+            distributor_performance.append({
+                'id': distributor.id,
+                'name': distributor.name,
+                **perf_data
+            })
     
     # Sort by achievement percent (descending)
-    distributor_performance.sort(key=lambda x: x['achievement_percent'], reverse=True)
+    distributor_performance.sort(key=lambda x: x.get('achievement_percent', 0), reverse=True)
+    
+    # Get selected distributor's performance data
+    selected_distributor_performance = None
+    if distributor_id:
+        for dp in distributor_performance:
+            if dp['id'] == int(distributor_id):
+                selected_distributor_performance = dp
+                break
     
     # Check if the request wants JSON data
     if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
         return jsonify({
-            'overall_data': overall_data,
-            'distributor_performance': distributor_performance
+            'overall_data': distributor_performance,
+            'selected_distributor_performance': selected_distributor_performance
         })
     
     return render_template(
@@ -147,8 +191,8 @@ def dashboard():
         selected_month=selected_month,
         selected_date_range=selected_date_range,
         selected_distributor_id=distributor_id,
-        overall_data=overall_data,
-        distributor_performance=distributor_performance
+        overall_data=distributor_performance,
+        selected_distributor_performance=selected_distributor_performance
     )
 
 # Distributor Routes
@@ -263,45 +307,63 @@ def targets():
     financial_years = get_all_financial_years(2020, 2035)
     
     # Get all months
-    months = ['Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec', 'Jan', 'Feb', 'Mar']
+    months = ['All', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec', 'Jan', 'Feb', 'Mar']
     
     # If no date_range is provided, get the default one for the selected month
     if not selected_date_range:
-        # Parse the financial year to get the calendar year
-        fy_start_year = int("20" + selected_financial_year[2:4])
-        
-        # Map months to their calendar values
-        month_map = {
-            'Apr': 4, 'May': 5, 'Jun': 6, 'Jul': 7, 'Aug': 8, 'Sep': 9, 
-            'Oct': 10, 'Nov': 11, 'Dec': 12, 'Jan': 1, 'Feb': 2, 'Mar': 3
-        }
-        
-        # Determine the year for this month
-        month_num = month_map[selected_month]
-        year = fy_start_year if month_num >= 4 else fy_start_year + 1
-        
-        # Get the first day of the month
-        first_day = datetime(year, month_num, 1)
-        
-        # Find the first Monday of the month or last Monday of the previous month
-        first_week_start = first_day - timedelta(days=first_day.weekday())
-        first_week_end = first_week_start + timedelta(days=6)
-        
-        # Set the default date range
-        selected_date_range = f"{first_week_start.strftime('%d %b')} - {first_week_end.strftime('%d %b')}"
+        if selected_month == 'All':
+            # Set date range for entire financial year
+            fy_start_year = int("20" + selected_financial_year[2:4])
+            selected_date_range = f"01 Apr {fy_start_year} - 31 Mar {fy_start_year + 1}"
+        else:
+            # Parse the financial year to get the calendar year
+            fy_start_year = int("20" + selected_financial_year[2:4])
+            
+            # Map months to their calendar values
+            month_map = {
+                'Apr': 4, 'May': 5, 'Jun': 6, 'Jul': 7, 'Aug': 8, 'Sep': 9, 
+                'Oct': 10, 'Nov': 11, 'Dec': 12, 'Jan': 1, 'Feb': 2, 'Mar': 3
+            }
+            
+            # Determine the year for this month
+            month_num = month_map[selected_month]
+            year = fy_start_year if month_num >= 4 else fy_start_year + 1
+            
+            # Get the first day of the month
+            first_day = datetime(year, month_num, 1)
+            
+            # Find the first Monday of the month or last Monday of the previous month
+            first_week_start = first_day - timedelta(days=first_day.weekday())
+            first_week_end = first_week_start + timedelta(days=6)
+            
+            # Set the default date range
+            selected_date_range = f"{first_week_start.strftime('%d %b')} - {first_week_end.strftime('%d %b')}"
     
     # Create period identifier for existing targets lookup (e.g., "Apr-FY24-25")
-    period_identifier = f"{selected_month}-{selected_financial_year}"
-    
-    # Get current targets for all distributors
-    targets = {}
-    for distributor in distributors:
-        target = Target.query.filter_by(
-            distributor_id=distributor.id,
-            period_type='Monthly',
-            period_identifier=period_identifier
-        ).first()
-        targets[distributor.id] = target.target_value if target else 0
+    if selected_month == 'All':
+        # For 'All', we need to handle differently - perhaps we want to show all targets
+        # for the financial year, regardless of month
+        targets = {}
+        for distributor in distributors:
+            # Sum all monthly targets for this financial year
+            yearly_target = db.session.query(func.sum(Target.target_value)).filter(
+                Target.distributor_id == distributor.id,
+                Target.period_type == 'Monthly',
+                Target.period_identifier.like(f"%-{selected_financial_year}")
+            ).scalar()
+            targets[distributor.id] = yearly_target if yearly_target else 0
+    else:
+        period_identifier = f"{selected_month}-{selected_financial_year}"
+        
+        # Get current targets for all distributors
+        targets = {}
+        for distributor in distributors:
+            target = Target.query.filter_by(
+                distributor_id=distributor.id,
+                period_type='Monthly',
+                period_identifier=period_identifier
+            ).first()
+            targets[distributor.id] = target.target_value if target else 0
     
     return render_template(
         'targets.html',
@@ -460,32 +522,37 @@ def actuals():
     financial_years = get_all_financial_years(2020, 2035)
     
     # Get all months
-    months = ['Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec', 'Jan', 'Feb', 'Mar']
+    months = ['All', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec', 'Jan', 'Feb', 'Mar']
     
     # If no date_range is provided, get the default one for the selected month
     if not selected_date_range:
-        # Parse the financial year to get the calendar year
-        fy_start_year = int("20" + selected_financial_year[2:4])
-        
-        # Map months to their calendar values
-        month_map = {
-            'Apr': 4, 'May': 5, 'Jun': 6, 'Jul': 7, 'Aug': 8, 'Sep': 9, 
-            'Oct': 10, 'Nov': 11, 'Dec': 12, 'Jan': 1, 'Feb': 2, 'Mar': 3
-        }
-        
-        # Determine the year for this month
-        month_num = month_map[selected_month]
-        year = fy_start_year if month_num >= 4 else fy_start_year + 1
-        
-        # Get the first day of the month
-        first_day = datetime(year, month_num, 1)
-        
-        # Find the first Monday of the month or last Monday of the previous month
-        first_week_start = first_day - timedelta(days=first_day.weekday())
-        first_week_end = first_week_start + timedelta(days=6)
-        
-        # Set the default date range
-        selected_date_range = f"{first_week_start.strftime('%d %b')} - {first_week_end.strftime('%d %b')}"
+        if selected_month == 'All':
+            # Set date range for entire financial year
+            fy_start_year = int("20" + selected_financial_year[2:4])
+            selected_date_range = f"01 Apr {fy_start_year} - 31 Mar {fy_start_year + 1}"
+        else:
+            # Parse the financial year to get the calendar year
+            fy_start_year = int("20" + selected_financial_year[2:4])
+            
+            # Map months to their calendar values
+            month_map = {
+                'Apr': 4, 'May': 5, 'Jun': 6, 'Jul': 7, 'Aug': 8, 'Sep': 9, 
+                'Oct': 10, 'Nov': 11, 'Dec': 12, 'Jan': 1, 'Feb': 2, 'Mar': 3
+            }
+            
+            # Determine the year for this month
+            month_num = month_map[selected_month]
+            year = fy_start_year if month_num >= 4 else fy_start_year + 1
+            
+            # Get the first day of the month
+            first_day = datetime(year, month_num, 1)
+            
+            # Find the first Monday of the month or last Monday of the previous month
+            first_week_start = first_day - timedelta(days=first_day.weekday())
+            first_week_end = first_week_start + timedelta(days=6)
+            
+            # Set the default date range
+            selected_date_range = f"{first_week_start.strftime('%d %b')} - {first_week_end.strftime('%d %b')}"
     
     # Get current actuals for all distributors 
     actuals = {}
@@ -658,7 +725,7 @@ def reports():
     financial_years = get_all_financial_years(2020, 2035)
     
     # Get all months
-    months = ['Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec', 'Jan', 'Feb', 'Mar']
+    months = ['All', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec', 'Jan', 'Feb', 'Mar']
     
     return render_template(
         'reports.html',
@@ -942,7 +1009,7 @@ def send_to_distributor():
 @app.route('/api/months/<financial_year>')
 @login_required
 def get_months(financial_year):
-    month_names = ['Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec', 'Jan', 'Feb', 'Mar']
+    month_names = ['All', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec', 'Jan', 'Feb', 'Mar']
     return jsonify(month_names)
 
 @app.route('/api/date_range/<financial_year>/<month>')
@@ -951,6 +1018,24 @@ def get_date_range(financial_year, month):
     """Return the date range for a given financial year and month."""
     # Parse the financial year to get the calendar year
     fy_start_year = int("20" + financial_year[2:4])
+    
+    # Handle case for 'All' (entire financial year)
+    if month == 'All':
+        # Financial year runs from April to March
+        start_date = datetime(fy_start_year, 4, 1)  # April 1st of fy_start_year
+        end_date = datetime(fy_start_year + 1, 3, 31)  # March 31st of next year
+        
+        date_display = f"01 Apr {fy_start_year} - 31 Mar {fy_start_year + 1}"
+        weeks = [{
+            'start': start_date.strftime('%Y-%m-%d'),
+            'end': end_date.strftime('%Y-%m-%d'),
+            'display': date_display
+        }]
+        
+        return jsonify({
+            'weeks': weeks,
+            'default': date_display
+        }) if request.args.get('all_weeks') else jsonify(date_display)
     
     # Map months to their calendar values
     month_map = {

@@ -85,6 +85,16 @@ function initializeDatepicker() {
     const selectedMonth = monthSelect.value;
     const financialYear = financialYearSelect.value;
     
+    // If 'All' is selected, don't initialize datepicker
+    if (selectedMonth === 'All') {
+        // If we have an existing datepicker, destroy it
+        if (datepicker) {
+            datepicker.destroy();
+            datepicker = null;
+        }
+        return;
+    }
+    
     // Map month names to numbers
     const monthMap = {
         'Jan': 0, 'Feb': 1, 'Mar': 2, 'Apr': 3, 'May': 4, 'Jun': 5,
