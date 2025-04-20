@@ -415,7 +415,7 @@ def edit_target(id):
     
     return render_template('target_form.html', target=target, distributors=distributors, financial_years=financial_years)
 
-@app.route('/targets/<int:id>/delete', methods=['POST'])
+@app.route('/targets/<int:id>/delete', methods=['GET', 'POST'])
 @login_required
 def delete_target(id):
     target = Target.query.get_or_404(id)
@@ -616,7 +616,7 @@ def edit_actual(id):
     
     return render_template('actual_form.html', actual=actual, distributors=distributors)
 
-@app.route('/actuals/<int:id>/delete', methods=['POST'])
+@app.route('/actuals/<int:id>/delete', methods=['GET', 'POST'])
 @login_required
 def delete_actual(id):
     actual = Actual.query.get_or_404(id)
@@ -985,6 +985,13 @@ def get_date_range(financial_year, month):
         })
         current_week_start += timedelta(days=7)
     
+    # Check if request wants all weeks or just the first one
+    if request.args.get('all_weeks'):
+        return jsonify({
+            'weeks': weeks,
+            'default': weeks[0]['display'] if weeks else "No dates available"
+        })
+    
     # By default, return the first week's date range
     return jsonify(weeks[0]['display'] if weeks else "No dates available")
 
@@ -1011,9 +1018,10 @@ def batch_sales_entry():
 def save_batch_targets():
     financial_year = request.form.get('financial_year')
     month = request.form.get('month')
+    date_range = request.form.get('date_range')
     distributor_ids = request.form.getlist('distributor_ids')
     
-    if not all([financial_year, month]) or not distributor_ids:
+    if not all([financial_year, month, date_range]) or not distributor_ids:
         flash('Please select at least one distributor and specify the period', 'danger')
         return redirect(url_for('targets'))
     
@@ -1067,6 +1075,7 @@ def save_batch_targets():
     except Exception as e:
         db.session.rollback()
         flash(f'Error saving targets: {str(e)}', 'danger')
+        print(f"Error details: {e}")  # For debugging
     
     return redirect(url_for('targets'))
 
@@ -1089,9 +1098,30 @@ def save_batch_sales():
             flash('Invalid date range format', 'danger')
             return redirect(url_for('actuals'))
         
-        # Parse "dd MMM" format for start and end dates
-        start_day, start_month = date_parts[0].split(' ')
-        end_day, end_month = date_parts[1].split(' ')
+        # Parse date parts format: "DD MMM"
+        try:
+            # Try to parse using datetime.strptime first
+            start_date_str = date_parts[0].strip()
+            end_date_str = date_parts[1].strip()
+            
+            # Add a default year to parse the date (will be replaced later)
+            start_date = datetime.strptime(f"{start_date_str} 2000", "%d %b %Y")
+            end_date = datetime.strptime(f"{end_date_str} 2000", "%d %b %Y")
+            
+            # Extract day and month
+            start_day = start_date.day
+            start_month = start_date.strftime('%b')  # 'Jan', 'Feb', etc.
+            
+            end_day = end_date.day
+            end_month = end_date.strftime('%b')
+        except ValueError:
+            # If that fails, try manual parsing
+            start_day, start_month = date_parts[0].strip().split(' ')
+            end_day, end_month = date_parts[1].strip().split(' ')
+            
+            # Convert to integers where needed
+            start_day = int(start_day)
+            end_day = int(end_day)
         
         # Map month abbreviations to numbers
         month_map = {
@@ -1165,5 +1195,6 @@ def save_batch_sales():
     except Exception as e:
         db.session.rollback()
         flash(f'Error saving sales: {str(e)}', 'danger')
+        print(f"Error details: {e}")  # For debugging
     
     return redirect(url_for('actuals'))

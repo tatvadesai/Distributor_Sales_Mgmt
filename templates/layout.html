@@ -11,6 +11,9 @@
     <!-- Font Awesome Icons -->
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     
+    <!-- DateRangePicker CSS -->
+    <link rel="stylesheet" type="text/css" href="https://cdn.jsdelivr.net/npm/daterangepicker@3.1.0/daterangepicker.css">
+    
     <!-- Custom CSS -->
     <link href="{{ url_for('static', filename='css/custom.css') }}" rel="stylesheet">
 </head>
@@ -41,11 +44,6 @@
                     <li class="nav-item">
                         <a class="nav-link {% if request.endpoint == 'targets' %}active{% endif %}" href="{{ url_for('targets') }}">
                             <i class="fas fa-bullseye me-1"></i> Targets
-                        </a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link {% if request.endpoint == 'batch_targets' %}active{% endif %}" href="{{ url_for('batch_targets') }}">
-                            <i class="fas fa-th-list me-1"></i> Batch Entry
                         </a>
                     </li>
                     <li class="nav-item">
@@ -103,6 +101,12 @@
     
     <!-- jQuery -->
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    
+    <!-- Moment.js (Required for DateRangePicker) -->
+    <script src="https://cdn.jsdelivr.net/momentjs/latest/moment.min.js"></script>
+    
+    <!-- DateRangePicker JS -->
+    <script src="https://cdn.jsdelivr.net/npm/daterangepicker@3.1.0/daterangepicker.min.js"></script>
     
     <!-- Bootstrap JS Bundle with Popper -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>

@@ -43,7 +43,13 @@
                         </div>
                         <div class="col-md-4">
                             <label for="sales_date_range" class="form-label">Date Range</label>
-                            <input type="text" class="form-control" id="sales_date_range" name="date_range" value="{{ selected_date_range }}" readonly>
+                            <div class="input-group">
+                                <input type="text" class="form-control" id="sales_date_range" name="date_range" value="{{ selected_date_range }}">
+                                <span class="input-group-text bg-primary text-white">
+                                    <i class="fas fa-calendar-alt"></i>
+                                </span>
+                            </div>
+                            <small class="text-primary fw-bold">Click to select custom dates</small>
                         </div>
                     </div>
                     
@@ -116,31 +122,12 @@
                                             <a href="{{ url_for('edit_actual', id=actual.id) }}" class="btn btn-sm btn-primary">
                                                 <i class="fas fa-edit"></i>
                                             </a>
-                                            <button type="button" class="btn btn-sm btn-danger" data-bs-toggle="modal" data-bs-target="#deleteModal{{ actual.id }}">
-                                                <i class="fas fa-trash"></i>
-                                            </button>
-                                            
-                                            <!-- Delete Confirmation Modal -->
-                                            <div class="modal fade" id="deleteModal{{ actual.id }}" tabindex="-1" aria-labelledby="deleteModalLabel{{ actual.id }}" aria-hidden="true">
-                                                <div class="modal-dialog">
-                                                    <div class="modal-content">
-                                                        <div class="modal-header bg-danger text-white">
-                                                            <h5 class="modal-title" id="deleteModalLabel{{ actual.id }}">Confirm Delete</h5>
-                                                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                                                        </div>
-                                                        <div class="modal-body">
-                                                            Are you sure you want to delete the sales record for <strong>{{ actual.distributor.name }}</strong> for the period <strong>{{ actual.week_start_date|format_date }}</strong> to <strong>{{ actual.week_end_date|format_date }}</strong>?
-                                                        </div>
-                                                        <div class="modal-footer">
-                                                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                                                            <form action="{{ url_for('delete_actual', id=actual.id) }}" method="POST">
-                                                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                                                <button type="submit" class="btn btn-danger">Delete</button>
-                                                            </form>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            </div>
+                                            <form action="{{ url_for('delete_actual', id=actual.id) }}" method="POST" style="display: inline;">
+                                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                                <button type="submit" class="btn btn-sm btn-danger" onclick="return confirm('Are you sure you want to delete this record?');">
+                                                    <i class="fas fa-trash"></i>
+                                                </button>
+                                            </form>
                                         </td>
                                     </tr>
                                 {% endfor %}
@@ -160,14 +147,66 @@
 
 {% block scripts %}
 <script>
+let currentSelection = '';
+
+document.addEventListener('DOMContentLoaded', function() {
+    // Store original selection
+    currentSelection = document.getElementById('sales_month').value;
+    
+    // Initialize date range picker with prominent styling
+    $('#sales_date_range').daterangepicker({
+        opens: 'center',
+        autoApply: false,
+        showDropdowns: true,
+        minYear: 2020,
+        maxYear: 2030,
+        ranges: {
+            'Today': [moment(), moment()],
+            'Yesterday': [moment().subtract(1, 'days'), moment().subtract(1, 'days')],
+            'Last 7 Days': [moment().subtract(6, 'days'), moment()],
+            'Last 30 Days': [moment().subtract(29, 'days'), moment()],
+            'This Month': [moment().startOf('month'), moment().endOf('month')],
+            'Last Month': [moment().subtract(1, 'month').startOf('month'), moment().subtract(1, 'month').endOf('month')]
+        },
+        locale: {
+            format: 'DD MMM - DD MMM',
+            applyLabel: "Select",
+            cancelLabel: "Cancel",
+            customRangeLabel: "Custom Range"
+        }
+    });
+    
+    // Apply styling to make the date picker more prominent
+    $('.daterangepicker').addClass('border border-primary shadow-lg');
+    
+    // Initialize date range if needed
+    if (document.getElementById('sales_financial_year').value && 
+        document.getElementById('sales_month').value && 
+        !document.getElementById('sales_date_range').value) {
+        updateSalesDateRange();
+    }
+});
+
+function initSalesDatePicker() {
+    $('#sales_date_range').daterangepicker({
+        opens: 'left',
+        autoApply: true,
+        locale: {
+            format: 'DD MMM - DD MMM'
+        }
+    });
+}
+
 function updateSalesMonths() {
     const financialYear = document.getElementById('sales_financial_year').value;
+    
+    // Show loading indicator on the month select
+    const monthSelect = document.getElementById('sales_month');
+    monthSelect.disabled = true;
     
     fetch(`/api/months/${financialYear}`)
         .then(response => response.json())
         .then(months => {
-            const monthSelect = document.getElementById('sales_month');
-            const currentSelection = monthSelect.value;
             monthSelect.innerHTML = '';
             
             let found = false;
@@ -186,8 +225,15 @@ function updateSalesMonths() {
                 monthSelect.value = months[0];
             }
             
+            // Re-enable month select
+            monthSelect.disabled = false;
+            
             // Update date range after month is updated
             updateSalesDateRange();
+        })
+        .catch(error => {
+            console.error('Error fetching months:', error);
+            monthSelect.disabled = false;
         });
 }
 
@@ -196,22 +242,36 @@ function updateSalesDateRange() {
     const month = document.getElementById('sales_month').value;
     
     if (financialYear && month) {
-        fetch(`/api/date_range/${financialYear}/${month}`)
+        // Get all weeks for the selected month
+        fetch(`/api/date_range/${financialYear}/${month}?all_weeks=true`)
             .then(response => response.json())
-            .then(dateRange => {
-                document.getElementById('sales_date_range').value = dateRange;
+            .then(data => {
+                // Get the first week as default
+                const defaultRange = data.default;
+                
+                // Update the date range input
+                const dateRangeInput = document.getElementById('sales_date_range');
+                
+                // Only update if not manually set by user
+                if (!dateRangeInput._userSelected) {
+                    dateRangeInput.value = defaultRange;
+                    
+                    // Reinitialize date picker with new date
+                    if ($(dateRangeInput).data('daterangepicker')) {
+                        $(dateRangeInput).data('daterangepicker').remove();
+                    }
+                    initSalesDatePicker();
+                }
+            })
+            .catch(error => {
+                console.error('Error fetching date range:', error);
             });
     }
 }
 
-// Initialize date range
-document.addEventListener('DOMContentLoaded', function() {
-    // Initialize sales date range if needed
-    if (document.getElementById('sales_financial_year').value && 
-        document.getElementById('sales_month').value && 
-        !document.getElementById('sales_date_range').value) {
-        updateSalesDateRange();
-    }
+// Mark the date range as user-selected when changed
+document.getElementById('sales_date_range').addEventListener('change', function() {
+    this._userSelected = true;
 });
 </script>
 {% endblock %}

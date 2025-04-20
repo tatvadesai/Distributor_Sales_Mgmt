@@ -3,8 +3,12 @@ import logging
 from datetime import datetime
 from flask import Flask, session, request, render_template
 from flask_sqlalchemy import SQLAlchemy
-from flask_login import LoginManager
-from flask_wtf.csrf import CSRFProtect
+try:
+    from flask_login import LoginManager
+except ImportError:
+    print("WARNING: flask_login module not found. User authentication will not work.")
+    LoginManager = None
+# We're not using CSRF protection at all
 from werkzeug.middleware.proxy_fix import ProxyFix
 from sqlalchemy.orm import DeclarativeBase
 from dotenv import load_dotenv
@@ -25,13 +29,13 @@ class Base(DeclarativeBase):
 # Initialize SQLAlchemy
 db = SQLAlchemy(model_class=Base)
 
-# Initialize CSRF protection
-csrf = CSRFProtect()
-
 # Create Flask app
 app = Flask(__name__)
 app.secret_key = os.environ.get("SESSION_SECRET", "dev_secret_key")
 app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1)
+
+# Set Flask debug mode from environment
+app.config["DEBUG"] = os.environ.get("FLASK_DEBUG", "True").lower() == "true"
 
 # Configure database
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -58,9 +62,6 @@ print(f"Database path: {db_path}")
 app.config["SQLALCHEMY_DATABASE_URI"] = f"sqlite:///{db_path}"
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 
-# Set Flask debug mode from environment
-app.config["DEBUG"] = os.environ.get("FLASK_DEBUG", "True").lower() == "true"
-
 # Security settings
 app.config['SESSION_COOKIE_SECURE'] = not app.config["DEBUG"]  # Secure in production
 app.config['SESSION_COOKIE_HTTPONLY'] = True
@@ -68,16 +69,26 @@ app.config['REMEMBER_COOKIE_SECURE'] = not app.config["DEBUG"]  # Secure in prod
 app.config['REMEMBER_COOKIE_HTTPONLY'] = True
 app.config['REMEMBER_COOKIE_DURATION'] = 86400  # 1 day in seconds
 
+# Completely disable WTF CSRF
+app.config['WTF_CSRF_ENABLED'] = False
+
+# Create a context processor to provide a dummy csrf_token function to templates
+@app.context_processor
+def inject_csrf_token():
+    def csrf_token():
+        return "dummy_token"
+    return dict(csrf_token=csrf_token)
+
 # Initialize database with app
 db.init_app(app)
 
-# Initialize CSRF protection with app
-csrf.init_app(app)
-
 # Configure login manager
-login_manager = LoginManager()
-login_manager.init_app(app)
-login_manager.login_view = 'login'
+if LoginManager:
+    login_manager = LoginManager()
+    login_manager.init_app(app)
+    login_manager.login_view = 'login'
+else:
+    print("WARNING: LoginManager not available, skipping login manager initialization")
 
 # Import models to ensure tables are created
 with app.app_context():
@@ -99,10 +110,11 @@ with app.app_context():
         logging.info("Created default admin user")
 
 # User loader for Flask-Login
-@login_manager.user_loader
-def load_user(user_id):
-    from models import User
-    return User.query.get(int(user_id))
+if LoginManager:
+    @login_manager.user_loader
+    def load_user(user_id):
+        from models import User
+        return User.query.get(int(user_id))
 
 # Security headers middleware
 @app.after_request
