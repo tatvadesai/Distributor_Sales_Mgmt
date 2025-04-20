@@ -1,25 +1,29 @@
 <!-- Reusable Filter Component -->
 <form method="GET" action="{{ filter_action }}" id="filterForm">
     <div class="row g-3 align-items-center mb-4">
-        <div class="col-md-4">
+        <div class="col-md-3">
             <label for="financial_year" class="form-label">Financial Year</label>
-            <select class="form-select" id="financial_year" name="financial_year" onchange="updateMonthOptions(); this.form.submit();">
+            <select class="form-select" id="financial_year" name="financial_year">
                 {% for year in financial_years %}
                     <option value="{{ year }}" {% if year == selected_financial_year %}selected{% endif %}>{{ year }}</option>
                 {% endfor %}
             </select>
         </div>
-        <div class="col-md-4">
+        <div class="col-md-3">
             <label for="month" class="form-label">Month</label>
-            <select class="form-select" id="month" name="month" onchange="this.form.submit();">
+            <select class="form-select" id="month" name="month">
                 {% for month in months %}
                     <option value="{{ month }}" {% if month == selected_month %}selected{% endif %}>{{ month }}</option>
                 {% endfor %}
             </select>
         </div>
-        <div class="col-md-4">
+        <div class="col-md-3">
+            <label for="date_range" class="form-label">Date Range</label>
+            <input type="text" class="form-control" id="date_range" name="date_range" value="{{ selected_date_range }}" readonly>
+        </div>
+        <div class="col-md-3">
             <label for="distributor_id" class="form-label">Distributor (Optional)</label>
-            <select class="form-select" id="distributor_id" name="distributor_id" onchange="this.form.submit();">
+            <select class="form-select" id="distributor_id" name="distributor_id">
                 <option value="">All Distributors</option>
                 {% for distributor in distributors %}
                     <option value="{{ distributor.id }}" {% if selected_distributor_id|int == distributor.id %}selected{% endif %}>{{ distributor.name }}</option>
@@ -27,9 +31,33 @@
             </select>
         </div>
     </div>
+    <div class="row mb-3">
+        <div class="col-md-12 text-end">
+            <button type="button" id="applyFilters" class="btn btn-primary">
+                <i class="fas fa-filter me-1"></i> Apply Filters
+            </button>
+        </div>
+    </div>
 </form>
 
 <script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Add event listeners
+    document.getElementById('financial_year').addEventListener('change', updateMonthOptions);
+    document.getElementById('month').addEventListener('change', updateDateRange);
+    document.getElementById('applyFilters').addEventListener('click', function() {
+        document.getElementById('filterForm').submit();
+    });
+    
+    // Initialize with selected values
+    const financialYear = document.getElementById('financial_year').value;
+    const month = document.getElementById('month').value;
+    
+    if (financialYear && month && !document.getElementById('date_range').value) {
+        updateDateRange();
+    }
+});
+
 function updateMonthOptions() {
     const financialYear = document.getElementById('financial_year').value;
     
@@ -37,14 +65,41 @@ function updateMonthOptions() {
         .then(response => response.json())
         .then(months => {
             const monthSelect = document.getElementById('month');
+            const currentSelection = monthSelect.value;
             monthSelect.innerHTML = '';
             
+            let optionFound = false;
             months.forEach(month => {
                 const option = document.createElement('option');
                 option.value = month;
                 option.textContent = month;
+                if (month === currentSelection) {
+                    option.selected = true;
+                    optionFound = true;
+                }
                 monthSelect.appendChild(option);
             });
+            
+            // If current selection not found, select first option
+            if (!optionFound && months.length > 0) {
+                monthSelect.value = months[0];
+            }
+            
+            // After updating months, update the date range
+            updateDateRange();
         });
+}
+
+function updateDateRange() {
+    const financialYear = document.getElementById('financial_year').value;
+    const month = document.getElementById('month').value;
+    
+    if (financialYear && month) {
+        fetch(`/api/date_range/${financialYear}/${month}`)
+            .then(response => response.json())
+            .then(dateRange => {
+                document.getElementById('date_range').value = dateRange;
+            });
+    }
 }
 </script> 
