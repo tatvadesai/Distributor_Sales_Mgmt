@@ -2,20 +2,91 @@
 
 {% block content %}
 <div class="row mb-4">
-    <div class="col-md-12">
+    <div class="col-md-12 mb-4">
         <div class="card shadow">
             <div class="card-header d-flex justify-content-between align-items-center bg-primary text-white">
                 <h5 class="mb-0"><i class="fas fa-bullseye me-2"></i>Targets</h5>
                 <div>
-                    <a href="{{ url_for('batch_targets') }}" class="btn btn-sm btn-warning me-2">
-                        <i class="fas fa-th-list me-1"></i>Batch Entry
-                    </a>
                     <a href="{{ url_for('new_target') }}" class="btn btn-sm btn-light">
                         <i class="fas fa-plus me-1"></i>Set New Target
                     </a>
                 </div>
             </div>
+            
+            <!-- Batch Target Entry Form -->
+            <div class="card-body border-bottom pb-4">
+                <h5 class="mb-3"><i class="fas fa-th-list me-2"></i>Batch Target Entry</h5>
+                <form method="POST" action="{{ url_for('save_batch_targets') }}" id="batchTargetForm">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    
+                    <div class="row mb-3">
+                        <div class="col-md-4">
+                            <label for="target_financial_year" class="form-label">Financial Year:</label>
+                            <div class="input-group">
+                                <select class="form-select" id="target_financial_year" name="financial_year" onchange="updateTargetMonths()">
+                                    {% for year in financial_years %}
+                                        <option value="{{ year }}" {% if year == selected_financial_year %}selected{% endif %}>{{ year }}</option>
+                                    {% endfor %}
+                                </select>
+                                <span class="input-group-text">
+                                    <i class="fas fa-chevron-down"></i>
+                                </span>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <label for="target_month" class="form-label">Month:</label>
+                            <select class="form-select" id="target_month" name="month" onchange="updateTargetDateRange()">
+                                {% for month in months %}
+                                    <option value="{{ month }}" {% if month == selected_month %}selected{% endif %}>{{ month }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label for="target_date_range" class="form-label">Date Range</label>
+                            <input type="text" class="form-control" id="target_date_range" name="date_range" value="{{ selected_date_range }}" readonly>
+                        </div>
+                    </div>
+                    
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label class="form-label">Distributor:</label>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Target:</label>
+                        </div>
+                    </div>
+                    
+                    {% for distributor in distributors %}
+                        <div class="row mb-3">
+                            <div class="col-md-6">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" name="distributor_ids" value="{{ distributor.id }}" id="targetDist{{ distributor.id }}" checked>
+                                    <label class="form-check-label" for="targetDist{{ distributor.id }}">
+                                        {{ distributor.name }}
+                                    </label>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="input-group">
+                                    <input type="number" step="0.01" min="0" class="form-control" name="target_values[{{ distributor.id }}]" placeholder="Target" 
+                                        value="{{ targets.get(distributor.id, 0) }}">
+                                    <span class="input-group-text">cases</span>
+                                </div>
+                            </div>
+                        </div>
+                    {% endfor %}
+                    
+                    <div class="text-center mt-3">
+                        <button type="submit" class="btn btn-success rounded-pill px-4">
+                            Save
+                        </button>
+                    </div>
+                </form>
+            </div>
+            
+            <!-- Target List -->
             <div class="card-body">
+                <h5 class="mb-3"><i class="fas fa-list me-2"></i>Target List</h5>
                 <div class="table-responsive">
                     <table class="table table-hover table-striped">
                         <thead class="table-dark">
@@ -29,8 +100,8 @@
                             </tr>
                         </thead>
                         <tbody>
-                            {% if targets %}
-                                {% for target in targets %}
+                            {% if targets_list %}
+                                {% for target in targets_list %}
                                     <tr>
                                         <td>{{ target.distributor.name }}</td>
                                         <td>{{ target.period_type }}</td>
@@ -87,4 +158,62 @@
         </div>
     </div>
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function updateTargetMonths() {
+    const financialYear = document.getElementById('target_financial_year').value;
+    
+    fetch(`/api/months/${financialYear}`)
+        .then(response => response.json())
+        .then(months => {
+            const monthSelect = document.getElementById('target_month');
+            const currentSelection = monthSelect.value;
+            monthSelect.innerHTML = '';
+            
+            let found = false;
+            months.forEach(month => {
+                const option = document.createElement('option');
+                option.value = month;
+                option.textContent = month;
+                if (month === currentSelection) {
+                    option.selected = true;
+                    found = true;
+                }
+                monthSelect.appendChild(option);
+            });
+            
+            if (!found && months.length > 0) {
+                monthSelect.value = months[0];
+            }
+            
+            // Update date range after month is updated
+            updateTargetDateRange();
+        });
+}
+
+function updateTargetDateRange() {
+    const financialYear = document.getElementById('target_financial_year').value;
+    const month = document.getElementById('target_month').value;
+    
+    if (financialYear && month) {
+        fetch(`/api/date_range/${financialYear}/${month}`)
+            .then(response => response.json())
+            .then(dateRange => {
+                document.getElementById('target_date_range').value = dateRange;
+            });
+    }
+}
+
+// Initialize date range
+document.addEventListener('DOMContentLoaded', function() {
+    // Initialize target date range if needed
+    if (document.getElementById('target_financial_year').value && 
+        document.getElementById('target_month').value && 
+        !document.getElementById('target_date_range').value) {
+        updateTargetDateRange();
+    }
+});
+</script>
 {% endblock %}

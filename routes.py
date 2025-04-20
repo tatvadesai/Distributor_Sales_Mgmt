@@ -237,10 +237,79 @@ def delete_distributor(id):
 @app.route('/targets')
 @login_required
 def targets():
-    targets = Target.query.order_by(Target.period_type, Target.period_identifier, Target.distributor_id).all()
+    # Get current date for default values
+    today = datetime.now()
+    
+    # Get financial year data
+    current_fin_year = get_financial_year(today)
+    current_month = today.strftime('%b')  # Current month name (short form)
+    
+    # Get selected filters from request or use defaults
+    selected_financial_year = request.args.get('financial_year', current_fin_year)
+    selected_month = request.args.get('month', current_month)
+    selected_date_range = request.args.get('date_range', '')
+    
+    # Get all distributors
     distributors = Distributor.query.all()
     
-    return render_template('targets.html', targets=targets, distributors=distributors)
+    # Get all targets
+    targets_list = Target.query.order_by(Target.period_type, Target.period_identifier, Target.distributor_id).all()
+    
+    # Get all financial years
+    financial_years = get_all_financial_years(2020, 2035)
+    
+    # Get all months
+    months = ['Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec', 'Jan', 'Feb', 'Mar']
+    
+    # If no date_range is provided, get the default one for the selected month
+    if not selected_date_range:
+        # Parse the financial year to get the calendar year
+        fy_start_year = int("20" + selected_financial_year[2:4])
+        
+        # Map months to their calendar values
+        month_map = {
+            'Apr': 4, 'May': 5, 'Jun': 6, 'Jul': 7, 'Aug': 8, 'Sep': 9, 
+            'Oct': 10, 'Nov': 11, 'Dec': 12, 'Jan': 1, 'Feb': 2, 'Mar': 3
+        }
+        
+        # Determine the year for this month
+        month_num = month_map[selected_month]
+        year = fy_start_year if month_num >= 4 else fy_start_year + 1
+        
+        # Get the first day of the month
+        first_day = datetime(year, month_num, 1)
+        
+        # Find the first Monday of the month or last Monday of the previous month
+        first_week_start = first_day - timedelta(days=first_day.weekday())
+        first_week_end = first_week_start + timedelta(days=6)
+        
+        # Set the default date range
+        selected_date_range = f"{first_week_start.strftime('%d %b')} - {first_week_end.strftime('%d %b')}"
+    
+    # Create period identifier for existing targets lookup (e.g., "Apr-FY24-25")
+    period_identifier = f"{selected_month}-{selected_financial_year}"
+    
+    # Get current targets for all distributors
+    targets = {}
+    for distributor in distributors:
+        target = Target.query.filter_by(
+            distributor_id=distributor.id,
+            period_type='Monthly',
+            period_identifier=period_identifier
+        ).first()
+        targets[distributor.id] = target.target_value if target else 0
+    
+    return render_template(
+        'targets.html',
+        distributors=distributors,
+        targets_list=targets_list,
+        financial_years=financial_years,
+        months=months,
+        selected_financial_year=selected_financial_year,
+        selected_month=selected_month,
+        selected_date_range=selected_date_range,
+        targets=targets
+    )
 
 @app.route('/targets/new', methods=['GET', 'POST'])
 @login_required
@@ -365,10 +434,77 @@ def delete_target(id):
 @app.route('/actuals')
 @login_required
 def actuals():
-    actuals = Actual.query.order_by(Actual.week_start_date.desc(), Actual.distributor_id).all()
+    # Get current date for default values
+    today = datetime.now()
+    
+    # Get financial year data
+    current_fin_year = get_financial_year(today)
+    current_month = today.strftime('%b')  # Current month name (short form)
+    
+    # Get selected filters from request or use defaults
+    selected_financial_year = request.args.get('financial_year', current_fin_year)
+    selected_month = request.args.get('month', current_month)
+    selected_date_range = request.args.get('date_range', '')
+    
+    # Get all distributors
     distributors = Distributor.query.all()
     
-    return render_template('actuals.html', actuals=actuals, distributors=distributors)
+    # Get all actuals
+    actuals_list = Actual.query.order_by(Actual.week_start_date.desc(), Actual.distributor_id).all()
+    
+    # Get all financial years
+    financial_years = get_all_financial_years(2020, 2035)
+    
+    # Get all months
+    months = ['Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec', 'Jan', 'Feb', 'Mar']
+    
+    # If no date_range is provided, get the default one for the selected month
+    if not selected_date_range:
+        # Parse the financial year to get the calendar year
+        fy_start_year = int("20" + selected_financial_year[2:4])
+        
+        # Map months to their calendar values
+        month_map = {
+            'Apr': 4, 'May': 5, 'Jun': 6, 'Jul': 7, 'Aug': 8, 'Sep': 9, 
+            'Oct': 10, 'Nov': 11, 'Dec': 12, 'Jan': 1, 'Feb': 2, 'Mar': 3
+        }
+        
+        # Determine the year for this month
+        month_num = month_map[selected_month]
+        year = fy_start_year if month_num >= 4 else fy_start_year + 1
+        
+        # Get the first day of the month
+        first_day = datetime(year, month_num, 1)
+        
+        # Find the first Monday of the month or last Monday of the previous month
+        first_week_start = first_day - timedelta(days=first_day.weekday())
+        first_week_end = first_week_start + timedelta(days=6)
+        
+        # Set the default date range
+        selected_date_range = f"{first_week_start.strftime('%d %b')} - {first_week_end.strftime('%d %b')}"
+    
+    # Get current actuals for all distributors 
+    actuals = {}
+    for distributor in distributors:
+        # Find matching actuals for this month and get sum
+        month_actuals = db.session.query(func.sum(Actual.actual_sales)).filter(
+            Actual.distributor_id == distributor.id,
+            Actual.month == selected_month,
+            Actual.year.like(f"%{selected_financial_year[2:]}")  # Match FY part
+        ).scalar()
+        actuals[distributor.id] = month_actuals if month_actuals else 0
+    
+    return render_template(
+        'actuals.html',
+        distributors=distributors,
+        actuals_list=actuals_list,
+        financial_years=financial_years,
+        months=months,
+        selected_financial_year=selected_financial_year,
+        selected_month=selected_month,
+        selected_date_range=selected_date_range,
+        actuals=actuals
+    )
 
 @app.route('/actuals/new', methods=['GET', 'POST'])
 @login_required
@@ -855,87 +991,20 @@ def get_date_range(financial_year, month):
 @app.route('/batch_targets', methods=['GET'])
 @login_required
 def batch_targets():
-    # Get current date for default values
-    today = datetime.now()
-    
-    # Get financial year data
-    current_fin_year = get_financial_year(today)
-    current_month = today.strftime('%b')  # Current month name (short form)
-    
-    # Get selected filters from request or use defaults
-    selected_financial_year = request.args.get('financial_year', current_fin_year)
-    selected_month = request.args.get('month', current_month)
-    selected_date_range = request.args.get('date_range', '')
-    
-    # Get all distributors
-    distributors = Distributor.query.all()
-    
-    # Get all financial years
-    financial_years = get_all_financial_years(2020, 2035)
-    
-    # Get all months
-    months = ['Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec', 'Jan', 'Feb', 'Mar']
-    
-    # If no date_range is provided, get the default one for the selected month
-    if not selected_date_range:
-        # Parse the financial year to get the calendar year
-        fy_start_year = int("20" + selected_financial_year[2:4])
-        
-        # Map months to their calendar values
-        month_map = {
-            'Apr': 4, 'May': 5, 'Jun': 6, 'Jul': 7, 'Aug': 8, 'Sep': 9, 
-            'Oct': 10, 'Nov': 11, 'Dec': 12, 'Jan': 1, 'Feb': 2, 'Mar': 3
-        }
-        
-        # Determine the year for this month
-        month_num = month_map[selected_month]
-        year = fy_start_year if month_num >= 4 else fy_start_year + 1
-        
-        # Get the first day of the month
-        first_day = datetime(year, month_num, 1)
-        
-        # Find the first Monday of the month or last Monday of the previous month
-        first_week_start = first_day - timedelta(days=first_day.weekday())
-        first_week_end = first_week_start + timedelta(days=6)
-        
-        # Set the default date range
-        selected_date_range = f"{first_week_start.strftime('%d %b')} - {first_week_end.strftime('%d %b')}"
-    
-    # Create period identifier for existing targets lookup (e.g., "Apr-FY24-25")
-    period_identifier = f"{selected_month}-{selected_financial_year}"
-    
-    # Get current targets for all distributors
-    targets = {}
-    for distributor in distributors:
-        target = Target.query.filter_by(
-            distributor_id=distributor.id,
-            period_type='Monthly',
-            period_identifier=period_identifier
-        ).first()
-        targets[distributor.id] = target.target_value if target else 0
-    
-    # Get current actuals for all distributors 
-    actuals = {}
-    for distributor in distributors:
-        # Find matching actuals for this month and get sum
-        month_actuals = db.session.query(func.sum(Actual.actual_sales)).filter(
-            Actual.distributor_id == distributor.id,
-            Actual.month == selected_month,
-            Actual.year.like(f"%{selected_financial_year[2:]}")  # Match FY part
-        ).scalar()
-        actuals[distributor.id] = month_actuals if month_actuals else 0
-    
-    return render_template(
-        'batch_targets.html',
-        distributors=distributors,
-        financial_years=financial_years,
-        months=months,
-        selected_financial_year=selected_financial_year,
-        selected_month=selected_month,
-        selected_date_range=selected_date_range,
-        targets=targets,
-        actuals=actuals
-    )
+    # Redirect to the main targets page
+    return redirect(url_for('targets'))
+
+@app.route('/batch_target_entry', methods=['GET'])
+@login_required
+def batch_target_entry():
+    # Redirect to the main targets page
+    return redirect(url_for('targets'))
+
+@app.route('/batch_sales_entry', methods=['GET'])
+@login_required
+def batch_sales_entry():
+    # Redirect to the main actuals page
+    return redirect(url_for('actuals'))
 
 @app.route('/save_batch_targets', methods=['POST'])
 @login_required
@@ -946,7 +1015,7 @@ def save_batch_targets():
     
     if not all([financial_year, month]) or not distributor_ids:
         flash('Please select at least one distributor and specify the period', 'danger')
-        return redirect(url_for('batch_targets'))
+        return redirect(url_for('targets'))
     
     # Create period identifier for database (e.g., "Apr-FY24-25")
     period_identifier = f"{month}-{financial_year}"
@@ -999,7 +1068,7 @@ def save_batch_targets():
         db.session.rollback()
         flash(f'Error saving targets: {str(e)}', 'danger')
     
-    return redirect(url_for('batch_targets'))
+    return redirect(url_for('targets'))
 
 @app.route('/save_batch_sales', methods=['POST'])
 @login_required
@@ -1011,14 +1080,14 @@ def save_batch_sales():
     
     if not all([financial_year, month, date_range]) or not distributor_ids:
         flash('Please select at least one distributor and specify the period', 'danger')
-        return redirect(url_for('batch_targets'))
+        return redirect(url_for('actuals'))
     
     try:
         # Parse date range to get actual dates
         date_parts = date_range.split(' - ')
         if len(date_parts) != 2:
             flash('Invalid date range format', 'danger')
-            return redirect(url_for('batch_targets'))
+            return redirect(url_for('actuals'))
         
         # Parse "dd MMM" format for start and end dates
         start_day, start_month = date_parts[0].split(' ')
@@ -1097,4 +1166,4 @@ def save_batch_sales():
         db.session.rollback()
         flash(f'Error saving sales: {str(e)}', 'danger')
     
-    return redirect(url_for('batch_targets'))
+    return redirect(url_for('actuals'))
