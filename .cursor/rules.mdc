@@ -1,6 +1,0 @@
----
-description: 
-globs: 
-alwaysApply: false
----
-NO USE OF CSRF TOKEN ANYWHERE, EVER FOR THIUS APP!
