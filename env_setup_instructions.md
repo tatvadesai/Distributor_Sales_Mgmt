@@ -5,8 +5,7 @@ This guide helps you set up the required environment variables for the Sales Man
 ## Table of Contents
 1. [Loading Environment Variables](#loading-environment-variables)
 2. [Email Configuration (SMTP)](#email-configuration-smtp)
-3. [Supabase Configuration](#supabase-configuration)
-4. [Security Best Practices](#security-best-practices)
+3. [Security Best Practices](#security-best-practices)
 
 ## Loading Environment Variables
 
@@ -57,64 +56,20 @@ The application uses SMTP to send emails. Here's how to set up email credentials
 
 3. Test the email configuration using the Email Test page in the application.
 
-## Supabase Configuration
-
-Supabase is used for cloud database backups. Follow these steps to set up:
-
-1. **Create a Supabase Account**:
-   - Go to [Supabase](https://supabase.com) and sign up
-   - Create a new project with a name like "Sales-Management-Backups"
-
-2. **Create the Backups Table**:
-   - Go to the "Table Editor" in your Supabase dashboard
-   - Click "Create a new table"
-   - Name it `backups`
-   - Add the following columns:
-     - `id` (type: `uuid`, check "Primary Key")
-     - `backup_id` (type: `text`)
-     - `table_name` (type: `text`)
-     - `timestamp` (type: `text`)
-     - `data` (type: `text`)
-   - Click "Save"
-
-3. **Get Your Credentials**:
-   - Go to Project Settings > API
-   - Find your Project URL and API Key (use the "anon" public key)
-   - Copy these values to your `.env` file:
-     ```
-     SUPABASE_URL=https://your-project-id.supabase.co
-     SUPABASE_KEY=your_supabase_api_key
-     ```
-
-4. **Test the Backup System**:
-   - Restart your application
-   - Go to the Backup page
-   - Click "Backup Now" to test
-
 ## Security Best Practices
 
-1. **Generate a Strong Session Secret**:
-   - Open a terminal and run:
-     ```
-     python -c "import secrets; print(secrets.token_hex(32))"
-     ```
-   - Copy the output to the `SESSION_SECRET` variable
+1. **Environment Variables**:
+   - Never share your `.env` file
+   - Use strong, unique passwords
+   - Regularly rotate your passwords
 
-2. **Limit Access to Your .env File**:
-   - Set restrictive file permissions:
-     ```
-     chmod 600 .env
-     ```
-   - Ensure only the application user can read it
+2. **Database Backups**:
+   - Backups are stored locally in the `backups/` directory
+   - Automated backups run three times a week
+   - Manual backups can be created through the application interface
+   - Regularly copy backups to an external storage device
 
-3. **Rotate Credentials Regularly**:
-   - Change the API keys and passwords every 90 days
-   - Update the `.env` file after each rotation
-
-4. **Use Minimum Required Permissions**:
-   - For Supabase, use the "anon" key which has limited permissions
-   - Create a dedicated email account for sending notifications
-
-5. **Monitoring**:
-   - Regularly check your Supabase usage
-   - Monitor email sending logs for unauthorized use 
+3. **Application Security**:
+   - Keep Python and all dependencies updated
+   - Use strong passwords for user accounts
+   - Regularly check application logs for suspicious activity 
