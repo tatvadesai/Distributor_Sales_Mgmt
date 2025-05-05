@@ -955,11 +955,13 @@ def summary_pdf():
     distributors = Distributor.query.all()
     # Correctly pass db, Actual, Target
     pdf_data = generate_summary_pdf(distributors, db, Actual, Target) 
+    # Helper for timestamp
+    export_time = datetime.now().strftime('%Y%m%d_%H%M')
     return send_file(
         io.BytesIO(pdf_data),
         mimetype='application/pdf',
-        as_attachment=True, # Ensure it downloads
-        download_name='summary_report.pdf'
+        as_attachment=True,
+        download_name=f'summary_report_{export_time}.pdf'
     )
 
 @app.route('/bulk_export_pdf')
@@ -970,11 +972,13 @@ def bulk_export_pdf():
     distributors = Distributor.query.all()
     # Correctly pass db, Actual, Target
     pdf_data = generate_bulk_pdf(distributors, db, Actual, Target) 
+    # Helper for timestamp
+    export_time = datetime.now().strftime('%Y%m%d_%H%M')
     return send_file(
-        io.BytesIO(pdf_data), # Send BytesIO directly
-        mimetype='application/pdf', # Corrected mimetype - already was correct
-        as_attachment=True, # Ensure it downloads
-        download_name='bulk_reports.pdf'
+        io.BytesIO(pdf_data),
+        mimetype='application/pdf',
+        as_attachment=True,
+        download_name=f'bulk_reports_{export_time}.pdf'
     )
 
 @app.route('/reports')
@@ -1146,21 +1150,25 @@ def generate_report(report_type):
     if report_type == 'pdf':
         pdf_data = generate_pdf_report(distributor.name, 'Monthly', period_identifier, performance_data)
         
+        # Helper for timestamp
+        export_time = datetime.now().strftime('%Y%m%d_%H%M')
         return send_file(
             io.BytesIO(pdf_data),
             mimetype='application/pdf',
             as_attachment=True,
-            download_name=f"{distributor.name}_Report_{month}_{financial_year}.pdf"
+            download_name=f"{distributor.name}_Report_{month}_{financial_year}_{export_time}.pdf"
         )
     
     elif report_type == 'excel':
         excel_data = generate_excel_report(distributor.name, 'Monthly', period_identifier, performance_data)
         
+        # Helper for timestamp
+        export_time = datetime.now().strftime('%Y%m%d_%H%M')
         return send_file(
             io.BytesIO(excel_data),
             mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
             as_attachment=True,
-            download_name=f"{distributor.name}_Report_{month}_{financial_year}.xlsx"
+            download_name=f"{distributor.name}_Report_{month}_{financial_year}_{export_time}.xlsx"
         )
     
     flash('Invalid report type', 'danger')
@@ -1242,12 +1250,15 @@ def bulk_export_reports():
     # Reset file pointer
     memory_file.seek(0)
     
+    # Helper for timestamp
+    export_time = datetime.now().strftime('%Y%m%d_%H%M')
+    
     # Send the ZIP file
     return send_file(
         memory_file,
         mimetype='application/zip',
         as_attachment=True,
-        download_name=f"All_Distributors_Reports_{month}_{financial_year}.zip"
+        download_name=f"All_Distributors_Reports_{month}_{financial_year}_{export_time}.zip"
     )
 
 # AJAX Routes
