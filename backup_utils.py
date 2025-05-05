@@ -4,27 +4,20 @@ import logging
 import sqlite3
 import pandas as pd
 from datetime import datetime
-from supabase import create_client, Client
+import shutil
+import os
 from apscheduler.schedulers.background import BackgroundScheduler
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-def get_supabase_client() -> Client:
-    """Get a Supabase client using environment variables."""
-    supabase_url = os.environ.get("SUPABASE_URL")
-    supabase_key = os.environ.get("SUPABASE_KEY")
-    
-    if not supabase_url or not supabase_key:
-        logger.error("Supabase URL and key must be set as environment variables.")
-        return None
-    
-    try:
-        return create_client(supabase_url, supabase_key)
-    except Exception as e:
-        logger.error(f"Error creating Supabase client: {str(e)}")
-        return None
+def ensure_backup_dir():
+    """Create backups directory if it doesn't exist"""
+    backup_dir = os.path.join(os.getcwd(), 'backups')
+    if not os.path.exists(backup_dir):
+        os.makedirs(backup_dir)
+    return backup_dir
 
 def backup_table(db_path, table_name):
     """
@@ -56,56 +49,40 @@ def backup_table(db_path, table_name):
         return []
 
 def perform_backup():
-    """Perform a full backup of the database to Supabase."""
-    # Get Supabase client
-    supabase = get_supabase_client()
-    if not supabase:
-        logger.error("Supabase client not available. Backup aborted.")
-        return False
-    
-    # Define database path (same as in app.py)
+    """Perform a full backup of the database to local storage"""
+    backup_dir = ensure_backup_dir()
     db_path = os.environ.get("DATABASE_PATH", "instance/distributor_tracker.db")
-    
-    # Tables to backup
     tables = ["distributor", "target", "actual", "user"]
-    
-    # Timestamp for the backup
     timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    backup_id = f"backup_{timestamp}"
     
     try:
-        # Create a backup record
-        backup_id = f"backup_{timestamp}"
+        # Create backup directory for this backup
+        backup_path = os.path.join(backup_dir, backup_id)
+        os.makedirs(backup_path)
         
         # Backup each table
         for table in tables:
-            # Get table data
             data = backup_table(db_path, table)
-            
             if not data:
-                logger.warning(f"No data found for table {table}")
                 continue
                 
-            # Store in Supabase
-            table_backup = {
-                "backup_id": backup_id,
-                "table_name": table,
-                "timestamp": timestamp,
-                "data": json.dumps(data)
-            }
+            # Save as JSON file
+            file_path = os.path.join(backup_path, f"{table}.json")
+            with open(file_path, 'w') as f:
+                json.dump(data, f)
             
-            # Insert into Supabase
-            result = supabase.table("backups").insert(table_backup).execute()
-            
-            if hasattr(result, 'error') and result.error:
-                logger.error(f"Error storing {table} backup: {result.error}")
-            else:
-                logger.info(f"Successfully backed up {table} with {len(data)} records")
+            logger.info(f"Saved {table} backup with {len(data)} records to {file_path}")
         
-        logger.info(f"Backup completed successfully: {backup_id}")
+        # Copy database file
+        db_backup_path = os.path.join(backup_path, "database.db")
+        shutil.copy2(db_path, db_backup_path)
+        
+        logger.info(f"Local backup completed: {backup_id}")
         return True
-        
+    
     except Exception as e:
-        logger.error(f"Error during backup: {str(e)}")
+        logger.error(f"Backup failed: {str(e)}")
         return False
 
 def start_backup_scheduler():
@@ -128,7 +105,7 @@ def start_backup_scheduler():
 
 def restore_from_backup(backup_id):
     """
-    Restore database from a specific backup.
+    Restore database from a local backup
     
     Args:
         backup_id: ID of the backup to restore
@@ -136,115 +113,85 @@ def restore_from_backup(backup_id):
     Returns:
         bool: Success status
     """
-    # Get Supabase client
-    supabase = get_supabase_client()
-    if not supabase:
-        return False
-    
-    # Define database path
+    backup_dir = os.path.join(os.getcwd(), 'backups')
+    backup_path = os.path.join(backup_dir, backup_id)
     db_path = os.environ.get("DATABASE_PATH", "instance/distributor_tracker.db")
     
+    if not os.path.exists(backup_path):
+        logger.error(f"Backup {backup_id} not found")
+        return False
+    
     try:
-        # Get all tables from the backup
-        result = supabase.table("backups").select("*").eq("backup_id", backup_id).execute()
+        # Restore database file
+        db_backup = os.path.join(backup_path, "database.db")
+        if os.path.exists(db_backup):
+            shutil.copy2(db_backup, db_path)
+            logger.info("Database file restored successfully")
+            return True
         
-        if hasattr(result, 'error') and result.error:
-            logger.error(f"Error retrieving backup: {result.error}")
-            return False
-            
-        backup_tables = result.data
-        
-        if not backup_tables:
-            logger.error(f"No backup found with ID {backup_id}")
-            return False
-            
-        # Connect to SQLite database
+        # Fallback to JSON restoration
         conn = sqlite3.connect(db_path)
         cursor = conn.cursor()
-        
-        # Begin transaction
         conn.execute("BEGIN TRANSACTION")
         
-        for table_backup in backup_tables:
-            table_name = table_backup["table_name"]
-            data = json.loads(table_backup["data"])
-            
-            if not data:
-                logger.warning(f"No data to restore for table {table_name}")
+        for table in ["distributor", "target", "actual", "user"]:
+            json_file = os.path.join(backup_path, f"{table}.json")
+            if not os.path.exists(json_file):
                 continue
-                
-            # Clear existing data from table
-            cursor.execute(f"DELETE FROM {table_name}")
             
-            # Get column names from first record
+            with open(json_file, 'r') as f:
+                data = json.load(f)
+            
+            cursor.execute(f"DELETE FROM {table}")
             columns = list(data[0].keys())
-            
-            # Build insert statement
             placeholders = ", ".join(["?" for _ in columns])
             column_str = ", ".join(columns)
-            sql = f"INSERT INTO {table_name} ({column_str}) VALUES ({placeholders})"
+            sql = f"INSERT INTO {table} ({column_str}) VALUES ({placeholders})"
             
-            # Insert data
             for record in data:
                 values = [record[col] for col in columns]
                 cursor.execute(sql, values)
-                
-            logger.info(f"Restored {len(data)} records to table {table_name}")
             
-        # Commit transaction
+            logger.info(f"Restored {len(data)} {table} records")
+        
         conn.commit()
         conn.close()
-        
         logger.info(f"Successfully restored from backup {backup_id}")
         return True
-        
+    
     except Exception as e:
-        logger.error(f"Error during restore: {str(e)}")
-        
-        # Try to rollback if connection exists
+        logger.error(f"Restore failed: {str(e)}")
         try:
             conn.rollback()
             conn.close()
         except:
             pass
-            
         return False
 
 # Function to get list of available backups
 def get_available_backups():
     """
-    Get a list of all available backups from Supabase.
+    Get list of local backups
     
     Returns:
-        list: List of backup IDs with timestamps
+        list: Sorted backup IDs with timestamps
     """
-    # Get Supabase client
-    supabase = get_supabase_client()
-    if not supabase:
-        return []
+    backup_dir = os.path.join(os.getcwd(), 'backups')
+    backups = []
     
     try:
-        # Get unique backup IDs
-        result = supabase.table("backups").select("backup_id, timestamp").execute()
+        if os.path.exists(backup_dir):
+            for dir_name in os.listdir(backup_dir):
+                if dir_name.startswith("backup_"):
+                    timestamp_str = dir_name.split("_", 1)[1]
+                    timestamp = datetime.strptime(timestamp_str, "%Y-%m-%d_%H-%M-%S")
+                    backups.append({
+                        "id": dir_name,
+                        "timestamp": timestamp.strftime("%Y-%m-%d %H:%M:%S")
+                    })
         
-        if hasattr(result, 'error') and result.error:
-            logger.error(f"Error retrieving backups: {result.error}")
-            return []
-            
-        # Get unique backups
-        backups = []
-        seen = set()
-        
-        for record in result.data:
-            if record["backup_id"] not in seen:
-                backups.append({
-                    "id": record["backup_id"],
-                    "timestamp": record["timestamp"]
-                })
-                seen.add(record["backup_id"])
-                
         return sorted(backups, key=lambda x: x["timestamp"], reverse=True)
-        
+    
     except Exception as e:
-        logger.error(f"Error retrieving backups: {str(e)}")
-        return [] 
+        logger.error(f"Error listing backups: {str(e)}")
+        return []

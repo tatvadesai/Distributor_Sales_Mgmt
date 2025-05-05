@@ -32,12 +32,9 @@ def main():
         import routes  # Import routes module instead of using wildcard import
         from backup_utils import start_backup_scheduler
         
-        # Start the backup scheduler if Supabase is configured
-        if os.environ.get("SUPABASE_URL") and os.environ.get("SUPABASE_KEY"):
-            backup_scheduler = start_backup_scheduler()
-            logging.info("Backup scheduler started")
-        else:
-            logging.warning("Supabase not configured. Automated backups are disabled.")
+        # Start the backup scheduler
+        backup_scheduler = start_backup_scheduler()
+        logging.info("Local backup scheduler started")
         
         # Schedule browser opening 2 seconds after server start
         Timer(2, open_browser).start()
@@ -54,4 +51,4 @@ def main():
         sys.exit(1)
 
 if __name__ == "__main__":
-    main() 
+    main()

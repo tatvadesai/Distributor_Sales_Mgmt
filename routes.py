@@ -1184,8 +1184,8 @@ def test_email():
 @app.route('/backup', methods=['GET', 'POST'])
 @login_required
 def backup_page():
-    # Check if Supabase is configured
-    is_configured = os.environ.get("SUPABASE_URL") and os.environ.get("SUPABASE_KEY")
+    # Local backups are always available
+    is_configured = True
     success_message = None
     error_message = None
     

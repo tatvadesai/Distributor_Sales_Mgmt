@@ -95,29 +95,13 @@
                     {% endif %}
                 {% else %}
                     <div class="alert alert-warning">
-                        <h6><i class="fas fa-exclamation-triangle me-2"></i>Supabase Not Configured</h6>
-                        <p>To enable database backups, you need to configure Supabase credentials:</p>
-                        <ol>
-                            <li>Create a Supabase account at <a href="https://supabase.com" target="_blank">https://supabase.com</a></li>
-                            <li>Create a new project</li>
-                            <li>Create a table named <code>backups</code> with the following columns:
-                                <ul>
-                                    <li><code>id</code> (type: uuid, primary key)</li>
-                                    <li><code>backup_id</code> (type: text)</li>
-                                    <li><code>table_name</code> (type: text)</li>
-                                    <li><code>timestamp</code> (type: text)</li>
-                                    <li><code>data</code> (type: text)</li>
-                                </ul>
-                            </li>
-                            <li>Get your Supabase URL and API key from the project settings</li>
-                            <li>Set the following environment variables:
-                                <ul>
-                                    <li><code>SUPABASE_URL</code>: Your Supabase project URL</li>
-                                    <li><code>SUPABASE_KEY</code>: Your Supabase API key</li>
-                                </ul>
-                            </li>
-                            <li>Restart the application</li>
-                        </ol>
+                        <h6><i class="fas fa-info-circle me-2"></i>Local Backups</h6>
+                        <p>Backups are automatically stored in the backups/ directory. Each backup contains:</p>
+                        <ul>
+                            <li>Complete database copy</li>
+                            <li>Individual table JSON files</li>
+                            <li>Timestamped directory structure</li>
+                        </ul>
                     </div>
                 {% endif %}
             </div>
@@ -130,4 +114,4 @@
         </div>
     </div>
 </div>
-{% endblock %} 
+{% endblock %}

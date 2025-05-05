@@ -1,19 +1,29 @@
 import os
 from dotenv import load_dotenv
-from app import app
+from app import app, db
 from routes import *
 from backup_utils import start_backup_scheduler
+from models import Distributor
+from database.init_db import DISTRIBUTORS
 
 # Load environment variables from .env file
 load_dotenv()
 
 if __name__ == "__main__":
-    # Start the backup scheduler if Supabase is configured
-    if os.environ.get("SUPABASE_URL") and os.environ.get("SUPABASE_KEY"):
-        backup_scheduler = start_backup_scheduler()
-        app.logger.info("Backup scheduler started")
-    else:
-        app.logger.warning("Supabase not configured. Automated backups are disabled.")
+    # Initialize database
+    with app.app_context():
+        db.create_all()
+        
+        # Seed initial distributors
+        existing = {d.name for d in Distributor.query.all()}
+        for name in DISTRIBUTORS:
+            if name not in existing:
+                db.session.add(Distributor(name=name))
+        db.session.commit()
+
+    # Start the backup scheduler
+    backup_scheduler = start_backup_scheduler()
+    app.logger.info("Local backup scheduler started")
     
     print("\n╭─────────────────────────────────────────────────────────────────╮")
     print("│                                                                 │")
