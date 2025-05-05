@@ -20,7 +20,8 @@
                     <div class="mb-4">
                         <h5>Manual Backup</h5>
                         <p>Create a manual backup of your entire database to local storage.</p>
-                        <form action="{{ url_for('create_backup') }}" method="post">
+                        <form action="{{ url_for('backup_page') }}" method="post">
+                            <input type="hidden" name="perform_backup" value="1">
                             <button type="submit" class="btn btn-primary">
                                 <i class="fas fa-download me-2"></i>Create Backup
                             </button>
@@ -29,7 +30,7 @@
 
                     <div class="mb-4">
                         <h5>Available Backups</h5>
-                        {% if backups %}
+                        {% if available_backups %}
                             <div class="table-responsive">
                                 <table class="table table-striped">
                                     <thead>
@@ -40,12 +41,13 @@
                                         </tr>
                                     </thead>
                                     <tbody>
-                                        {% for backup in backups %}
+                                        {% for backup in available_backups %}
                                             <tr>
                                                 <td>{{ backup.timestamp.split(' ')[0] }}</td>
                                                 <td>{{ backup.timestamp.split(' ')[1] }}</td>
                                                 <td>
-                                                    <form action="{{ url_for('restore_backup') }}" method="post" class="d-inline">
+                                                    <form action="{{ url_for('backup_page') }}" method="post" class="d-inline">
+                                                        <input type="hidden" name="restore_backup" value="1">
                                                         <input type="hidden" name="backup_id" value="{{ backup.id }}">
                                                         <button type="submit" class="btn btn-sm btn-warning" onclick="return confirm('Are you sure you want to restore this backup? This will overwrite your current data.')">
                                                             <i class="fas fa-undo me-1"></i>Restore
