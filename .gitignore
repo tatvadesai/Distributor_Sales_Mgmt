@@ -2,6 +2,7 @@
 .env
 .env.*
 
+backups/
 # Database
 *.db
 instance/
