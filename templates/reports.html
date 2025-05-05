@@ -22,8 +22,69 @@
                         {{ selected_month }} {{ selected_financial_year }} {% if selected_date_range %} ({{ selected_date_range }}){% endif %}
                     {% endif %}
                     </h6>
-                    <small>Choose export format below to generate reports for the selected period.</small>
+                    <div class="btn-group">
+                        <a href="{{ url_for('generate_report', report_type='pdf') }}?financial_year={{ selected_financial_year }}&month={{ selected_month }}&date_range={{ selected_date_range }}&distributor_id={% if selected_distributor_id %}{{ selected_distributor_id }}{% endif %}" 
+                           class="btn btn-sm btn-outline-danger" 
+                           data-bs-toggle="tooltip" 
+                           title="Generate PDF Report">
+                            <i class="fas fa-file-pdf"></i>
+                        </a>
+                        <a href="{{ url_for('generate_report', report_type='excel') }}?financial_year={{ selected_financial_year }}&month={{ selected_month }}&date_range={{ selected_date_range }}&distributor_id={% if selected_distributor_id %}{{ selected_distributor_id }}{% endif %}" 
+                           class="btn btn-sm btn-outline-success" 
+                           data-bs-toggle="tooltip" 
+                           title="Generate Excel Report">
+                            <i class="fas fa-file-excel"></i>
+                        </a>
+                    </div>
                 </div>
+                
+                <!-- Performance Summary Table -->
+                {% if performance_data %}
+                <div class="card mt-4">
+                    <div class="card-header bg-secondary text-white">
+                        <h6 class="mb-0"><i class="fas fa-table me-2"></i>Performance Summary</h6>
+                    </div>
+                    <div class="card-body p-0"> <!-- Remove padding to make table flush -->
+                        <div class="table-responsive"> <!-- Ensure responsiveness -->
+                            <table class="table table-bordered table-striped table-hover mb-0">
+                                <thead class="table-dark"> <!-- Dark header like the image -->
+                                    <tr>
+                                        <th>Distributor</th>
+                                        <th class="text-end">Target</th>
+                                        <th class="text-end">Actual</th>
+                                        <th class="text-end">Achievement</th>
+                                        <th class="text-end">Shortfall</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for item in performance_data %}
+                                    <tr>
+                                        <td>{{ item.name }}</td>
+                                        <td class="text-end">{{ "{:,.0f}".format(item.target) if item.target is not none else 'N/A' }}</td>
+                                        <td class="text-end">{{ "{:,.0f}".format(item.actual) if item.actual is not none else 'N/A' }}</td>
+                                        <td class="text-end">{{ "{:.0f}%".format(item.achievement_percent) if item.achievement_percent is not none else 'N/A' }}</td>
+                                        <td class="text-end">{{ "{:,.0f}".format(item.shortfall) if item.shortfall is not none else 'N/A' }}</td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                     <div class="card-footer text-muted small">
+                        Notes:<br>
+                        - All values are in cases (assuming based on context).<br>
+                        - Achievement percentage is calculated as (Actual / Target) * 100%.<br>
+                        - Shortfall is calculated as Target - Actual when Actual < Target.
+                    </div>
+                </div>
+                {% else %}
+                 <div class="alert alert-warning mt-4">
+                    No performance data available for the selected period.
+                </div>
+                {% endif %}
+                <!-- End Performance Summary Table -->
+
+                <h6 class="mt-4 mb-3 text-center text-muted"><i class="fas fa-cogs me-2"></i>Report Generation Options</h6>
                 
                 <div class="card mb-4">
                     <div class="card-header bg-light">
@@ -123,6 +184,45 @@
                         </div>
                     </div>
                 </div>
+                
+                <!-- New Card for Summary and Bulk Exports -->
+                <div class="card mt-4">
+                    <div class="card-header bg-light">
+                        <h6 class="mb-0"><i class="fas fa-file-archive me-2"></i>Overall Reports</h6>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <!-- Summary Report Button -->
+                            <div class="col-md-6 mb-3 mb-md-0">
+                                <div class="card h-100">
+                                    <div class="card-body text-center">
+                                        <i class="fas fa-list-alt fa-4x text-info mb-3"></i>
+                                        <h5>Summary Report</h5>
+                                        <p class="text-muted">Generate a single PDF summarizing performance for all distributors.</p>
+                                        <a href="{{ url_for('summary_pdf') }}" class="btn btn-outline-info">
+                                            <i class="fas fa-download me-1"></i>Summary for all distributors
+                                        </a>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- Bulk Report Button -->
+                            <div class="col-md-6">
+                                <div class="card h-100">
+                                    <div class="card-body text-center">
+                                        <i class="fas fa-folder-open fa-4x text-warning mb-3"></i>
+                                        <h5>Bulk Individual Reports</h5>
+                                        <p class="text-muted">Generate a combined PDF containing individual reports for all distributors.</p>
+                                         <a href="{{ url_for('bulk_export_pdf') }}" class="btn btn-outline-warning">
+                                            <i class="fas fa-download me-1"></i>Bulk report for distributors (individual)
+                                        </a>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <!-- End New Card -->
             </div>
         </div>
     </div>
@@ -137,9 +237,9 @@ function validateForm(form) {
     var month = form.querySelector('[name="month"]').value;
     var financialYear = form.querySelector('[name="financial_year"]').value;
     
-    if (!distributorId) {
-        alert("Please select a distributor.");
-        return false;
+    // Distributor optional for bulk reports
+    if (window.location.pathname.includes('bulk') && !distributorId) {
+        return true;
     }
     
     if (!month || !financialYear) {
@@ -156,9 +256,9 @@ function validateEmailForm(form) {
     var financialYear = form.querySelector('[name="financial_year"]').value;
     var email = form.querySelector('[name="email"]').value;
     
-    if (!distributorId) {
-        alert("Please select a distributor.");
-        return false;
+    // Distributor optional for bulk reports
+    if (window.location.pathname.includes('bulk') && !distributorId) {
+        return true;
     }
     
     if (!month || !financialYear) {
@@ -179,9 +279,9 @@ function validateDistributorForm(form) {
     var month = form.querySelector('[name="month"]').value;
     var financialYear = form.querySelector('[name="financial_year"]').value;
     
-    if (!distributorId) {
-        alert("Please select a distributor.");
-        return false;
+    // Distributor optional for bulk reports
+    if (window.location.pathname.includes('bulk') && !distributorId) {
+        return true;
     }
     
     if (!month || !financialYear) {
@@ -193,54 +293,59 @@ function validateDistributorForm(form) {
 }
 
 // When the form fields change, update all the hidden form fields
-document.addEventListener('DOMContentLoaded', function() {
-    // Get filter form
-    var filterForm = document.getElementById('filterForm');
+function initializeReportForms() {
+    const filterForm = document.getElementById('filterForm');
+    if (!filterForm) return;
+
+    const elements = {
+        financialYear: filterForm.querySelector('[name="financial_year"]'),
+        month: filterForm.querySelector('[name="month"]'),
+        dateRange: filterForm.querySelector('[name="date_range"]'),
+        distributor: filterForm.querySelector('[name="distributor_id"]')
+    };
+
+    function updateAllForms() {
+        const values = {
+            financialYear: elements.financialYear.value,
+            month: elements.month.value,
+            dateRange: elements.dateRange.value,
+            distributorId: elements.distributor.value
+        };
+
+        // Update all report forms
+        document.querySelectorAll('[id$="_financial_year"]').forEach(el => el.value = values.financialYear);
+        document.querySelectorAll('[id$="_month"]').forEach(el => el.value = values.month);
+        document.querySelectorAll('[id$="_date_range"]').forEach(el => el.value = values.dateRange);
+        document.querySelectorAll('[id$="_distributor_id"]').forEach(el => el.value = values.distributorId);
+    }
+
+    // Update on any input change
+    Object.values(elements).forEach(el => el.addEventListener('input', updateAllForms));
+    updateAllForms();
+}
+
+document.addEventListener('DOMContentLoaded', initializeReportForms);
+document.addEventListener('filterUpdated', initializeReportForms);
+
+// Summary report rendering
+function renderSummary(data) {
+    document.getElementById('total-target').textContent = data.target;
+    document.getElementById('total-actual').textContent = data.actual;
+    document.getElementById('performance-percentage').textContent = data.percentage;
+    document.getElementById('performance-trend').style.display = data.trend > 0 
+        ? 'inline-block' 
+        : 'none';
+}
+
+// Fetch summary data when filters change
+document.addEventListener('filterUpdated', async () => {
+    const response = await fetch('/api/summary?' + new URLSearchParams({
+        financial_year: document.querySelector('[name="financial_year"]').value,
+        month: document.querySelector('[name="month"]').value
+    }));
     
-    if (filterForm) {
-        var financialYearSelect = filterForm.querySelector('[name="financial_year"]');
-        var monthSelect = filterForm.querySelector('[name="month"]');
-        var dateRangeInput = filterForm.querySelector('[name="date_range"]');
-        var distributorSelect = filterForm.querySelector('[name="distributor_id"]');
-        
-        // Update hidden fields when filter form changes
-        function updateHiddenFields() {
-            var financialYear = financialYearSelect.value;
-            var month = monthSelect.value;
-            var dateRange = dateRangeInput.value;
-            var distributorId = distributorSelect.value;
-            
-            // Update PDF form
-            document.getElementById('pdf_financial_year').value = financialYear;
-            document.getElementById('pdf_month').value = month;
-            document.getElementById('pdf_date_range').value = dateRange;
-            document.getElementById('pdf_distributor_id').value = distributorId;
-            
-            // Update Excel form
-            document.getElementById('excel_financial_year').value = financialYear;
-            document.getElementById('excel_month').value = month;
-            document.getElementById('excel_date_range').value = dateRange;
-            document.getElementById('excel_distributor_id').value = distributorId;
-            
-            // Update Email form
-            document.getElementById('email_financial_year').value = financialYear;
-            document.getElementById('email_month').value = month;
-            document.getElementById('email_distributor_id').value = distributorId;
-            
-            // Update Distributor form
-            document.getElementById('dist_financial_year').value = financialYear;
-            document.getElementById('dist_month').value = month;
-            document.getElementById('dist_distributor_id').value = distributorId;
-        }
-        
-        // Add change event listeners to form elements
-        financialYearSelect.addEventListener('change', updateHiddenFields);
-        monthSelect.addEventListener('change', updateHiddenFields);
-        dateRangeInput.addEventListener('change', updateHiddenFields);
-        distributorSelect.addEventListener('change', updateHiddenFields);
-        
-        // Initialize hidden fields with current values
-        updateHiddenFields();
+    if (response.ok) {
+        renderSummary(await response.json());
     }
 });
 </script>

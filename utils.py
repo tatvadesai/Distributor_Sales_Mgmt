@@ -11,6 +11,7 @@ from email.mime.text import MIMEText
 from email.mime.application import MIMEApplication
 import os
 import logging
+from sqlalchemy import func # Ensure func is imported
 
 def calculate_periods(week_start_date_str):
     """
@@ -159,7 +160,6 @@ def generate_performance_data(distributor_id, period_type, period_identifier, db
     Returns:
         dict: Performance data with actual, target, achievement values
     """
-    from sqlalchemy import func
     
     # Get total target
     total_target = db.session.query(func.sum(Target.target_value)).filter(
@@ -177,13 +177,13 @@ def generate_performance_data(distributor_id, period_type, period_identifier, db
         month, financial_year = period_identifier.split('-', 1)
         
         # Get total actual by using a more flexible query that searches all records for the month
-        total_actual = db.session.query(func.sum(Actual.actual_sales))
+        total_actual_query = db.session.query(func.sum(Actual.actual_sales))
         
         if distributor_id:
-            total_actual = total_actual.filter(Actual.distributor_id == distributor_id)
+            total_actual_query = total_actual_query.filter(Actual.distributor_id == distributor_id)
         
         # Use both the month field and date-based filtering (just like the dashboard)
-        total_actual = total_actual.filter(
+        total_actual_query = total_actual_query.filter(
             (Actual.month == period_identifier) | 
             (Actual.month.like(f"{month}%") & Actual.year.like(f"%{financial_year[2:]}"))
         )
@@ -224,32 +224,32 @@ def generate_performance_data(distributor_id, period_type, period_identifier, db
             if date_filtered_actual > 0:
                 total_actual = date_filtered_actual
             else:
-                total_actual = total_actual.scalar() or 0
+                total_actual = total_actual_query.scalar() or 0
         except Exception as e:
             # Fallback to simple filtering if date parsing fails
-            total_actual = total_actual.scalar() or 0
+            total_actual = total_actual_query.scalar() or 0
             
     # Default filtering for other period types
     else:
-        total_actual = db.session.query(func.sum(Actual.actual_sales))
+        total_actual_query = db.session.query(func.sum(Actual.actual_sales))
         
         if distributor_id:
-            total_actual = total_actual.filter(Actual.distributor_id == distributor_id)
+            total_actual_query = total_actual_query.filter(Actual.distributor_id == distributor_id)
         
         if period_type == 'Weekly':
             week_date = get_period_weeks(period_type, period_identifier)[0] if get_period_weeks(period_type, period_identifier) else None
             if week_date:
-                total_actual = total_actual.filter(Actual.week_start_date == week_date)
+                total_actual_query = total_actual_query.filter(Actual.week_start_date == week_date)
             else:
-                total_actual = total_actual.filter(Actual.id == -1)  # No results if invalid
+                total_actual_query = total_actual_query.filter(Actual.id == -1)  # No results if invalid
         elif period_type == 'Monthly':
-            total_actual = total_actual.filter(Actual.month == period_identifier)
+            total_actual_query = total_actual_query.filter(Actual.month == period_identifier)
         elif period_type == 'Quarterly':
-            total_actual = total_actual.filter(Actual.quarter == period_identifier)
+            total_actual_query = total_actual_query.filter(Actual.quarter == period_identifier)
         elif period_type == 'Yearly':
-            total_actual = total_actual.filter(Actual.year == period_identifier)
+            total_actual_query = total_actual_query.filter(Actual.year == period_identifier)
         
-        total_actual = total_actual.scalar() or 0
+        total_actual = total_actual_query.scalar() or 0
     
     # Calculate achievement
     achievement_amount = total_actual
@@ -263,6 +263,143 @@ def generate_performance_data(distributor_id, period_type, period_identifier, db
         'achievement_percent': achievement_percent,
         'shortfall': shortfall
     }
+
+def generate_summary_pdf(distributors, db, Actual, Target):
+    """Generates a summary PDF for all distributors for the current financial year."""
+    from reportlab.pdfgen import canvas
+    from reportlab.lib.pagesizes import letter
+    from io import BytesIO
+    
+    buffer = BytesIO()
+    pdf = canvas.Canvas(buffer, pagesize=letter)
+    pdf.setTitle("Distributor Summary Report")
+    
+    # Get current financial year
+    current_fin_year = get_financial_year()
+    
+    # Report Header
+    pdf.setFont("Helvetica-Bold", 16)
+    pdf.drawString(72, 750, f"Distributor Performance Summary ({current_fin_year})")
+    
+    # Table Header
+    pdf.setFont("Helvetica-Bold", 12)
+    y_position = 700
+    pdf.drawString(72, y_position, "Name")
+    pdf.drawString(250, y_position, "Target")
+    pdf.drawString(400, y_position, "Actual")
+    pdf.drawString(500, y_position, "Ach %") # Added Achievement %
+    
+    # Table Content
+    pdf.setFont("Helvetica", 10) # Smaller font for more data
+    y_position -= 30
+    
+    for distributor in distributors:
+        # Calculate Target for the financial year
+        distributor_target = db.session.query(func.sum(Target.target_value)).filter(
+            Target.distributor_id == distributor.id,
+            Target.period_type == 'Monthly',
+            Target.period_identifier.like(f"%-{current_fin_year}")
+        ).scalar() or 0
+        
+        # Calculate Actual for the financial year
+        distributor_actual = db.session.query(func.sum(Actual.actual_sales)).filter(
+            Actual.distributor_id == distributor.id,
+            Actual.year == current_fin_year
+        ).scalar() or 0
+        
+        # Calculate Achievement Percentage
+        achievement_percent = (distributor_actual / distributor_target * 100) if distributor_target > 0 else 0
+        
+        # Draw row
+        pdf.drawString(72, y_position, distributor.name)
+        pdf.drawString(250, y_position, f"{int(distributor_target):,}")
+        pdf.drawString(400, y_position, f"{int(distributor_actual):,}")
+        pdf.drawString(500, y_position, f"{achievement_percent:.1f}%")
+        
+        y_position -= 20
+        if y_position < 100: # Check if page break needed
+            pdf.showPage()
+            # Redraw headers on new page
+            pdf.setFont("Helvetica-Bold", 16)
+            pdf.drawString(72, 750, f"Distributor Performance Summary ({current_fin_year}) (cont.)")
+            pdf.setFont("Helvetica-Bold", 12)
+            y_position = 700
+            pdf.drawString(72, y_position, "Name")
+            pdf.drawString(250, y_position, "Target")
+            pdf.drawString(400, y_position, "Actual")
+            pdf.drawString(500, y_position, "Ach %")
+            pdf.setFont("Helvetica", 10)
+            y_position -= 30
+            
+    pdf.save()
+    buffer.seek(0)
+    return buffer.getvalue()
+
+def generate_bulk_pdf(distributors, db, Actual, Target):
+    """Generates a combined PDF with individual reports for all distributors for the current financial year."""
+    from reportlab.pdfgen import canvas
+    from io import BytesIO
+    
+    buffer = BytesIO()
+    pdf = canvas.Canvas(buffer, pagesize=letter)
+    pdf.setTitle("Bulk Distributor Reports")
+    
+    # Get current financial year
+    current_fin_year = get_financial_year()
+    
+    first_page = True
+    for distributor in distributors:
+        if not first_page:
+            pdf.showPage() # New page for each distributor
+        else:
+            first_page = False
+            
+        # Calculate Target for the financial year
+        distributor_target = db.session.query(func.sum(Target.target_value)).filter(
+            Target.distributor_id == distributor.id,
+            Target.period_type == 'Monthly',
+            Target.period_identifier.like(f"%-{current_fin_year}")
+        ).scalar() or 0
+        
+        # Calculate Actual for the financial year
+        distributor_actual = db.session.query(func.sum(Actual.actual_sales)).filter(
+            Actual.distributor_id == distributor.id,
+            Actual.year == current_fin_year
+        ).scalar() or 0
+            
+        # Calculate Achievement Percentage
+        achievement_percent = (distributor_actual / distributor_target * 100) if distributor_target > 0 else 0
+        shortfall = max(0, distributor_target - distributor_actual)
+
+        # --- Start Drawing Distributor Page ---
+        pdf.setFont("Helvetica-Bold", 16)
+        pdf.drawString(72, 750, f"Performance Report: {distributor.name}")
+        pdf.setFont("Helvetica", 12)
+        pdf.drawString(72, 730, f"Financial Year: {current_fin_year}")
+        
+        pdf.setFont("Helvetica-Bold", 12)
+        pdf.drawString(72, 690, "Metric")
+        pdf.drawString(250, 690, "Value")
+        pdf.line(72, 685, 550, 685) # Underline header
+        
+        pdf.setFont("Helvetica", 12)
+        y = 665
+        pdf.drawString(72, y, "Target")
+        pdf.drawString(250, y, f"{int(distributor_target):,} cases")
+        y -= 20
+        pdf.drawString(72, y, "Actual")
+        pdf.drawString(250, y, f"{int(distributor_actual):,} cases")
+        y -= 20
+        pdf.drawString(72, y, "Achievement")
+        pdf.drawString(250, y, f"{achievement_percent:.1f}%")
+        y -= 20
+        pdf.drawString(72, y, "Shortfall")
+        pdf.drawString(250, y, f"{int(shortfall):,} cases")
+        # --- End Drawing Distributor Page ---
+
+    pdf.save()
+    buffer.seek(0)
+    return buffer.getvalue() # Return the single PDF buffer
 
 def generate_pdf_report(distributor_name, period_type, period_identifier, performance_data):
     """

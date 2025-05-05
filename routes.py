@@ -947,6 +947,36 @@ def delete_actual(id):
     return redirect(url_for('actuals'))
 
 # Report Routes
+@app.route('/generate_summary_pdf')
+@login_required
+def summary_pdf():
+    # Pass db, Actual, Target to the function
+    from utils import generate_summary_pdf
+    distributors = Distributor.query.all()
+    # Correctly pass db, Actual, Target
+    pdf_data = generate_summary_pdf(distributors, db, Actual, Target) 
+    return send_file(
+        io.BytesIO(pdf_data),
+        mimetype='application/pdf',
+        as_attachment=True, # Ensure it downloads
+        download_name='summary_report.pdf'
+    )
+
+@app.route('/bulk_export_pdf')
+@login_required
+def bulk_export_pdf():
+    # Pass db, Actual, Target to the function
+    from utils import generate_bulk_pdf
+    distributors = Distributor.query.all()
+    # Correctly pass db, Actual, Target
+    pdf_data = generate_bulk_pdf(distributors, db, Actual, Target) 
+    return send_file(
+        io.BytesIO(pdf_data), # Send BytesIO directly
+        mimetype='application/pdf', # Corrected mimetype - already was correct
+        as_attachment=True, # Ensure it downloads
+        download_name='bulk_reports.pdf'
+    )
+
 @app.route('/reports')
 @login_required
 def reports():
@@ -970,16 +1000,121 @@ def reports():
     
     # Get all months
     months = ['All', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec', 'Jan', 'Feb', 'Mar']
-    
+
+    # Fetch performance data for the selected period
+    performance_data = []
+    query_distributors = Distributor.query.all() # Fetch all distributors initially
+
+    # If a specific distributor is selected, filter the list
+    if distributor_id:
+        selected_distributor = Distributor.query.get(distributor_id)
+        if selected_distributor:
+            query_distributors = [selected_distributor]
+        else:
+            flash(f"Distributor with ID {distributor_id} not found.", "warning")
+            query_distributors = [] # Avoid processing if distributor not found
+
+    for distributor in query_distributors:
+        # Use the existing generate_performance_data function if suitable, 
+        # otherwise replicate logic from dashboard or create a specific one.
+        # For simplicity, let's replicate relevant logic from dashboard:
+        
+        distributor_target = 0
+        distributor_actual = 0
+        
+        if selected_month == 'All':
+            # Calculate for the entire financial year
+            fy_start_year = int("20" + selected_financial_year[2:4])
+            
+            # Sum monthly targets for the year
+            targets = Target.query.filter(
+                Target.distributor_id == distributor.id,
+                Target.period_type == 'Monthly',
+                Target.period_identifier.like(f"%-{selected_financial_year}")
+            ).all()
+            distributor_target = sum(t.target_value for t in targets)
+            
+            # Sum actuals for the year
+            actuals = Actual.query.filter(
+                Actual.distributor_id == distributor.id,
+                Actual.year == selected_financial_year
+            ).all()
+            distributor_actual = sum(a.actual_sales for a in actuals)
+
+            # Fallback using date range if year field yields no actuals
+            if distributor_actual == 0:
+                start_date = f"{fy_start_year}-04-01"
+                end_date = f"{fy_start_year+1}-03-31"
+                date_range_actuals = Actual.query.filter(
+                    Actual.distributor_id == distributor.id,
+                    Actual.week_start_date >= start_date,
+                    Actual.week_end_date <= end_date
+                ).all()
+                distributor_actual = sum(a.actual_sales for a in date_range_actuals)
+
+        else:
+            # Calculate for the specific month
+            period_identifier = f"{selected_month}-{selected_financial_year}"
+            
+            # Get monthly target
+            target = Target.query.filter_by(
+                distributor_id=distributor.id,
+                period_type='Monthly',
+                period_identifier=period_identifier
+            ).first()
+            distributor_target = target.target_value if target else 0
+            
+            # Sum weekly actuals for the month
+            actuals = Actual.query.filter_by(
+                distributor_id=distributor.id,
+                month=period_identifier # Assuming 'month' field stores 'Mon-YYYY' format
+            ).all()
+            distributor_actual = sum(a.actual_sales for a in actuals)
+
+            # Fallback using date range if month field yields no actuals
+            if not actuals:
+                 # Parse the financial year
+                fy_start_year = int("20" + selected_financial_year[2:4])
+                month_map = {'Apr': 4, 'May': 5, 'Jun': 6, 'Jul': 7, 'Aug': 8, 'Sep': 9, 'Oct': 10, 'Nov': 11, 'Dec': 12, 'Jan': 1, 'Feb': 2, 'Mar': 3}
+                month_num = month_map[selected_month]
+                year = fy_start_year if month_num >= 4 else fy_start_year + 1
+                _, days_in_month = calendar.monthrange(year, month_num)
+                start_date = f"{year}-{month_num:02d}-01"
+                end_date = f"{year}-{month_num:02d}-{days_in_month}"
+                
+                date_range_actuals = Actual.query.filter(
+                    Actual.distributor_id == distributor.id,
+                    Actual.week_start_date >= start_date,
+                    Actual.week_end_date <= end_date
+                ).all()
+                distributor_actual = sum(a.actual_sales for a in date_range_actuals)
+
+        # Calculate achievement and shortfall
+        achievement_percent = (distributor_actual / distributor_target * 100) if distributor_target > 0 else 0
+        shortfall = max(0, distributor_target - distributor_actual)
+        
+        performance_data.append({
+            'name': distributor.name,
+            'target': distributor_target,
+            'actual': distributor_actual,
+            'achievement_percent': achievement_percent,
+            'shortfall': shortfall
+        })
+
+    # Sort data if needed, e.g., by name
+    performance_data.sort(key=lambda x: x['name'])
+
     return render_template(
         'reports.html',
-        distributors=distributors,
+        distributors=distributors, # Pass the full list for the dropdown filter
         financial_years=financial_years,
         months=months,
         selected_financial_year=selected_financial_year,
         selected_month=selected_month,
-        selected_distributor_id=distributor_id
+        selected_distributor_id=distributor_id,
+        performance_data=performance_data # Pass the fetched data
     )
+
 
 @app.route('/generate_report/<report_type>', methods=['POST'])
 @login_required
