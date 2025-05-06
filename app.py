@@ -105,8 +105,8 @@ if db_path_env:
         # Relative path from environment - make it absolute
         db_path = os.path.join(current_dir, db_path_env)
 else:
-    # Default path in /tmp to avoid permission issues
-    db_path = os.path.join("/tmp", "distributor_tracker.db")
+    # Default path in the application directory
+    db_path = os.path.join(current_dir, "data", "distributor_tracker.db")
 
 # Create directory if it doesn't exist
 db_dir = os.path.dirname(db_path)
@@ -190,16 +190,31 @@ def add_security_headers(response):
 # Error handlers
 @app.errorhandler(404)
 def page_not_found(e):
-    return render_template('error.html', error_code=404, error_message="Page not found"), 404
+    logging.warning(f"Page not found: {request.url}")
+    return render_template('error.html', 
+                         error_code=404, 
+                         error_message="The page you're looking for doesn't exist. Please check the URL or contact IT support."), 404
 
 @app.errorhandler(500)
 def server_error(e):
     logging.error(f"Server error: {str(e)}")
-    return render_template('error.html', error_code=500, error_message="Internal server error"), 500
+    return render_template('error.html', 
+                         error_code=500, 
+                         error_message="Something went wrong on our end. Please try again or contact IT support if the problem persists."), 500
 
 @app.errorhandler(403)
 def forbidden(e):
-    return render_template('error.html', error_code=403, error_message="Access forbidden"), 403
+    logging.warning(f"Access forbidden: {request.url} by {request.remote_addr}")
+    return render_template('error.html', 
+                         error_code=403, 
+                         error_message="You don't have permission to access this page. Please contact your administrator if you believe this is an error."), 403
+
+@app.errorhandler(Exception)
+def handle_exception(e):
+    logging.error(f"Unhandled exception: {str(e)}")
+    return render_template('error.html', 
+                         error_code=500, 
+                         error_message="An unexpected error occurred. Please contact IT support with the error details."), 500
 
 # Jinja2 template filters
 @app.template_filter('format_date')
