@@ -118,9 +118,9 @@ app.config["SQLALCHEMY_DATABASE_URI"] = f"sqlite:///{db_path}"
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 
 # Security settings
-app.config['SESSION_COOKIE_SECURE'] = not app.config["DEBUG"]  # Secure in production
+app.config['SESSION_COOKIE_SECURE'] = False  # Not needed for internal app
 app.config['SESSION_COOKIE_HTTPONLY'] = True
-app.config['REMEMBER_COOKIE_SECURE'] = not app.config["DEBUG"]  # Secure in production
+app.config['REMEMBER_COOKIE_SECURE'] = False  # Not needed for internal app
 app.config['REMEMBER_COOKIE_HTTPONLY'] = True
 app.config['REMEMBER_COOKIE_DURATION'] = 86400  # 1 day in seconds
 
@@ -180,14 +180,11 @@ if HAS_FLASK_LOGIN:
             # Fallback to dummy user
             return DummyUser()
 
-# Security headers middleware
+# Simplified security headers for internal app
 @app.after_request
 def add_security_headers(response):
     response.headers['X-Content-Type-Options'] = 'nosniff'
     response.headers['X-Frame-Options'] = 'SAMEORIGIN'
-    response.headers['X-XSS-Protection'] = '1; mode=block'
-    response.headers['Strict-Transport-Security'] = 'max-age=31536000; includeSubDomains'
-    response.headers['Content-Security-Policy'] = "default-src 'self'; script-src 'self' 'unsafe-inline' cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' cdn.jsdelivr.net; img-src 'self' data:; font-src 'self' cdn.jsdelivr.net;"
     return response
 
 # Error handlers

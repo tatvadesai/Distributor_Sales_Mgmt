@@ -17,12 +17,9 @@ cd /d "%~dp0"
 start "Sales Dashboard" /B python app_launcher.py
 
 :: Wait for the server to start
-timeout /t 5
+timeout /t 3
 
-:: Open the default browser to the application URL
-start http://localhost:5001
-
-echo Application is running! You can access it at http://localhost:5001
+echo Application is running! You can access it at http://localhost:8765
 echo.
 echo Note: To backup data, use the backup functionality within the application.
 echo.
